@@ -7,6 +7,7 @@
 const AnalyticsApp = (() => {
   const ROW_HEIGHT = 40; // px per row
   const BUFFER_ROWS = 15;
+  const MAX_SAFE_SCROLL_HEIGHT = 6000000; // 6 million px (safe on all mobile & desktop browser engines)
 
   let isInitialized = false;
   let isRunning = false;
@@ -67,19 +68,63 @@ const AnalyticsApp = (() => {
   }
 
   /**
+   * Get virtual scroll top (scales if total virtual height exceeds browser safe limit)
+   */
+  function getVirtualScrollTop() {
+    if (!scrollContainer) return 0;
+    const totalItems = filteredDomains.length;
+    if (totalItems === 0) return 0;
+    const totalRawHeight = totalItems * ROW_HEIGHT;
+    const clientHeight = scrollContainer.clientHeight || 600;
+
+    if (totalRawHeight <= MAX_SAFE_SCROLL_HEIGHT) {
+      return scrollContainer.scrollTop;
+    }
+
+    const maxDomScroll = Math.max(1, MAX_SAFE_SCROLL_HEIGHT - clientHeight);
+    const scrollRatio = Math.min(1, Math.max(0, scrollContainer.scrollTop / maxDomScroll));
+    const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+    return scrollRatio * maxVirtualScroll;
+  }
+
+  /**
+   * Set DOM scroll position from virtual scroll top
+   */
+  function setVirtualScrollTop(targetVScrollTop) {
+    if (!scrollContainer) return;
+    const totalItems = filteredDomains.length;
+    if (totalItems === 0) return;
+    const clientHeight = scrollContainer.clientHeight || 600;
+    const totalRawHeight = totalItems * ROW_HEIGHT;
+
+    if (totalRawHeight <= MAX_SAFE_SCROLL_HEIGHT) {
+      scrollContainer.scrollTop = targetVScrollTop;
+      return;
+    }
+
+    const maxVirtualScroll = Math.max(1, totalRawHeight - clientHeight);
+    const ratio = Math.min(1, Math.max(0, targetVScrollTop / maxVirtualScroll));
+    const maxDomScroll = Math.max(1, MAX_SAFE_SCROLL_HEIGHT - clientHeight);
+    scrollContainer.scrollTop = ratio * maxDomScroll;
+  }
+
+  /**
    * Update position and size of the fast scroller thumb
    */
   function updateFastScrollThumb() {
     if (!scrollContainer || !fastScrollEl || !fastTrackEl || !fastThumbEl) return null;
-    if (filteredDomains.length === 0) {
+    const totalItems = filteredDomains.length;
+    if (totalItems === 0) {
       fastScrollEl.style.display = 'none';
       if (scrollPopupEl) scrollPopupEl.style.display = 'none';
       return null;
     }
 
-    const scrollHeight = scrollContainer.scrollHeight;
     const clientHeight = scrollContainer.clientHeight;
-    if (scrollHeight <= clientHeight || clientHeight === 0) {
+    if (clientHeight === 0) return null;
+
+    const totalRawHeight = totalItems * ROW_HEIGHT;
+    if (totalRawHeight <= clientHeight) {
       fastScrollEl.style.display = 'none';
       if (scrollPopupEl) scrollPopupEl.style.display = 'none';
       return null;
@@ -89,44 +134,55 @@ const AnalyticsApp = (() => {
 
     const trackHeight = fastTrackEl.clientHeight;
     // Proportional thumb height clamped between 36px and 120px
-    const thumbHeight = Math.max(36, Math.min(120, (clientHeight / scrollHeight) * trackHeight));
+    const thumbHeight = Math.max(36, Math.min(120, (clientHeight / totalRawHeight) * trackHeight));
     fastThumbEl.style.height = thumbHeight + 'px';
 
-    const maxScrollTop = scrollHeight - clientHeight;
-    const scrollRatio = maxScrollTop > 0 ? (scrollContainer.scrollTop / maxScrollTop) : 0;
     const availableTrack = trackHeight - thumbHeight;
+    const vScrollTop = getVirtualScrollTop();
+    const maxVirtualScroll = Math.max(1, totalRawHeight - clientHeight);
+    const scrollRatio = Math.min(1, Math.max(0, vScrollTop / maxVirtualScroll));
+
     const thumbTop = Math.max(0, Math.min(availableTrack, scrollRatio * availableTrack));
     fastThumbEl.style.top = thumbTop + 'px';
 
-    return { thumbTop, thumbHeight, availableTrack, trackHeight };
+    return { thumbTop, thumbHeight, availableTrack, trackHeight, scrollRatio };
   }
 
   /**
-   * Display floating count pop-up alongside the scroll thumb
+   * Display floating count pop-up alongside the scroll thumb with 100% accurate count & domain
    */
   function showScrollPopup(thumbTop, thumbHeight, trackHeight) {
     if (!scrollPopupEl || filteredDomains.length === 0 || !scrollContainer) return;
 
-    const scrollHeight = scrollContainer.scrollHeight;
-    const clientHeight = scrollContainer.clientHeight;
-    const maxScrollTop = scrollHeight - clientHeight;
-    const scrollRatio = maxScrollTop > 0 ? Math.min(1, Math.max(0, scrollContainer.scrollTop / maxScrollTop)) : 0;
+    const totalItems = filteredDomains.length;
+    const clientHeight = scrollContainer.clientHeight || 600;
+    const totalRawHeight = totalItems * ROW_HEIGHT;
+    const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+    const vScrollTop = getVirtualScrollTop();
 
-    const itemIndex = Math.min(filteredDomains.length - 1, Math.max(0, Math.round(scrollRatio * (filteredDomains.length - 1))));
-    const item = filteredDomains[itemIndex];
-    if (!item) return;
+    const scrollRatio = maxVirtualScroll > 0
+      ? Math.min(1, Math.max(0, vScrollTop / maxVirtualScroll))
+      : 0;
 
-    if (popupCountValEl) popupCountValEl.textContent = formatNumber(item.count);
-    if (popupDomainPreviewEl) popupDomainPreviewEl.textContent = `#${(itemIndex + 1).toLocaleString()} · ${item.domain}`;
-
-    const tTop = thumbTop != null ? thumbTop : (scrollRatio * ((trackHeight || 300) - 36));
     const tHeight = thumbHeight || 36;
+    const tTop = thumbTop != null ? thumbTop : (scrollRatio * ((trackHeight || 300) - tHeight));
     const centerY = tTop + (tHeight / 2) + 32; // +32px offset for table header
 
     scrollPopupEl.style.display = 'block';
     const popupH = scrollPopupEl.offsetHeight || 42;
     const clampedY = Math.max((popupH / 2) + 32, Math.min((trackHeight || 300) + 32 - (popupH / 2), centerY));
     scrollPopupEl.style.top = clampedY + 'px';
+
+    // Exact domain row horizontally adjacent to this pop-up
+    const popupContentOffset = Math.max(0, clampedY - 32);
+    const virtualYAtPopup = vScrollTop + popupContentOffset;
+    const itemIndex = Math.min(totalItems - 1, Math.max(0, Math.floor(virtualYAtPopup / ROW_HEIGHT)));
+
+    const item = filteredDomains[itemIndex];
+    if (!item) return;
+
+    if (popupCountValEl) popupCountValEl.textContent = formatNumber(item.count);
+    if (popupDomainPreviewEl) popupDomainPreviewEl.textContent = `#${(itemIndex + 1).toLocaleString()} · ${item.domain}`;
 
     requestAnimationFrame(() => {
       scrollPopupEl.style.opacity = '1';
@@ -188,8 +244,13 @@ const AnalyticsApp = (() => {
       const pointerY = e.clientY - trackRect.top - (thumbHeight / 2);
       const ratio = Math.max(0, Math.min(1, pointerY / availableTrack));
 
-      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-      scrollContainer.scrollTop = ratio * maxScrollTop;
+      const totalItems = filteredDomains.length;
+      const clientHeight = scrollContainer.clientHeight || 600;
+      const totalRawHeight = totalItems * ROW_HEIGHT;
+      const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+      const targetVScroll = ratio * maxVirtualScroll;
+
+      setVirtualScrollTop(targetVScroll);
 
       const thumbTop = ratio * availableTrack;
       fastThumbEl.style.top = thumbTop + 'px';
@@ -225,8 +286,13 @@ const AnalyticsApp = (() => {
       const clickY = e.clientY - trackRect.top - (thumbHeight / 2);
       const ratio = Math.max(0, Math.min(1, clickY / availableTrack));
 
-      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-      scrollContainer.scrollTop = ratio * maxScrollTop;
+      const totalItems = filteredDomains.length;
+      const clientHeight = scrollContainer.clientHeight || 600;
+      const totalRawHeight = totalItems * ROW_HEIGHT;
+      const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+      const targetVScroll = ratio * maxVirtualScroll;
+
+      setVirtualScrollTop(targetVScroll);
       renderVisible();
 
       const thumbInfo = updateFastScrollThumb();
@@ -238,23 +304,40 @@ const AnalyticsApp = (() => {
     // Forward wheel events on the track to the scroll container
     fastTrackEl.addEventListener('wheel', (e) => {
       e.preventDefault();
-      scrollContainer.scrollTop += e.deltaY;
+      const vScrollTop = getVirtualScrollTop();
+      const delta = e.deltaY;
+      setVirtualScrollTop(vScrollTop + delta);
+      renderVisible();
+      const thumbInfo = updateFastScrollThumb();
+      if (thumbInfo) {
+        showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+      }
     }, { passive: false });
 
     // Keyboard navigation when thumb is focused
     fastThumbEl.addEventListener('keydown', (e) => {
+      const vScrollTop = getVirtualScrollTop();
+      const clientHeight = scrollContainer.clientHeight || 600;
       if (e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault();
-        scrollContainer.scrollTop += (e.key === 'PageDown' ? scrollContainer.clientHeight : ROW_HEIGHT * 4);
+        setVirtualScrollTop(vScrollTop + (e.key === 'PageDown' ? clientHeight : ROW_HEIGHT * 4));
+        renderVisible();
+        updateFastScrollThumb();
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
-        scrollContainer.scrollTop -= (e.key === 'PageUp' ? scrollContainer.clientHeight : ROW_HEIGHT * 4);
+        setVirtualScrollTop(vScrollTop - (e.key === 'PageUp' ? clientHeight : ROW_HEIGHT * 4));
+        renderVisible();
+        updateFastScrollThumb();
       } else if (e.key === 'Home') {
         e.preventDefault();
-        scrollContainer.scrollTop = 0;
+        setVirtualScrollTop(0);
+        renderVisible();
+        updateFastScrollThumb();
       } else if (e.key === 'End') {
         e.preventDefault();
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        setVirtualScrollTop(filteredDomains.length * ROW_HEIGHT);
+        renderVisible();
+        updateFastScrollThumb();
       }
     });
   }
@@ -762,8 +845,10 @@ const AnalyticsApp = (() => {
           hideTableMessage();
           filteredDomains = [...data.topDomains];
           applySort(filteredDomains);
-          topDomainCount = data.topDomains[0]?.count || 1;
-          if (viewport) viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
+          if (viewport) {
+            const rawH = filteredDomains.length * ROW_HEIGHT;
+            viewport.style.height = (rawH > MAX_SAFE_SCROLL_HEIGHT ? MAX_SAFE_SCROLL_HEIGHT : rawH) + 'px';
+          }
           renderVisible();
           updateFastScrollThumb();
         }
@@ -970,8 +1055,12 @@ const AnalyticsApp = (() => {
 
     hideTableMessage();
 
+    const totalRawHeight = filteredDomains.length * ROW_HEIGHT;
+    const isScaled = totalRawHeight > MAX_SAFE_SCROLL_HEIGHT;
+    const safeHeight = isScaled ? MAX_SAFE_SCROLL_HEIGHT : totalRawHeight;
+
     if (viewport) {
-      viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
+      viewport.style.height = safeHeight + 'px';
     }
     if (scrollContainer) {
       scrollContainer.scrollTop = 0;
@@ -1007,11 +1096,20 @@ const AnalyticsApp = (() => {
       return;
     }
 
-    const scrollTop = scrollContainer.scrollTop;
-    const containerHeight = scrollContainer.clientHeight || window.innerHeight;
+    const clientHeight = scrollContainer.clientHeight || window.innerHeight || 600;
+    const totalRawHeight = totalItems * ROW_HEIGHT;
+    const isScaled = totalRawHeight > MAX_SAFE_SCROLL_HEIGHT;
+    const safeHeight = isScaled ? MAX_SAFE_SCROLL_HEIGHT : totalRawHeight;
 
-    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_ROWS);
-    const endIndex = Math.min(totalItems - 1, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + BUFFER_ROWS);
+    if (viewport.style.height !== safeHeight + 'px') {
+      viewport.style.height = safeHeight + 'px';
+    }
+
+    const vScrollTop = getVirtualScrollTop();
+    const scrollTop = scrollContainer.scrollTop;
+
+    const startIndex = Math.max(0, Math.floor(vScrollTop / ROW_HEIGHT) - BUFFER_ROWS);
+    const endIndex = Math.min(totalItems - 1, Math.ceil((vScrollTop + clientHeight) / ROW_HEIGHT) + BUFFER_ROWS);
 
     // Remove nodes that are out of bounds
     for (const [index, node] of visibleNodes.entries()) {
@@ -1021,10 +1119,16 @@ const AnalyticsApp = (() => {
       }
     }
 
-    // Render newly visible rows
+    // Render newly visible rows and update positions
     for (let i = startIndex; i <= endIndex; i++) {
-      if (!visibleNodes.has(i)) {
-        renderRow(i);
+      const rowTop = isScaled
+        ? Math.round(scrollTop + ((i * ROW_HEIGHT) - vScrollTop))
+        : (i * ROW_HEIGHT);
+      let node = visibleNodes.get(i);
+      if (!node) {
+        node = renderRow(i, rowTop);
+      } else if (isScaled) {
+        node.style.top = rowTop + 'px';
       }
     }
   }
@@ -1032,13 +1136,13 @@ const AnalyticsApp = (() => {
   /**
    * Render a single domain row in the virtual scroller
    */
-  function renderRow(index) {
+  function renderRow(index, rowTop) {
     const item = filteredDomains[index];
-    if (!item) return;
+    if (!item) return null;
 
     const row = document.createElement('div');
     row.className = 'analytics-row';
-    row.style.top = (index * ROW_HEIGHT) + 'px';
+    row.style.top = (rowTop != null ? rowTop : (index * ROW_HEIGHT)) + 'px';
     row.style.height = ROW_HEIGHT + 'px';
 
     // Rank column
