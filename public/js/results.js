@@ -20,9 +20,36 @@ const ResultsRenderer = (() => {
   let activeDropdownIndex = null;
   let fileMatchCounts = {};
   let activeFileFilter = null;
+  let isDedupeActive = false;
+  let streamingDedupeSeen = new Set();
 
   // Counts for each mode
   let counts = { raw: 0, email: 0, username: 0, phone: 0 };
+
+  /**
+   * Normalize deduplication key from URL, User (email/username/number), and Password
+   */
+  function normalizeDedupeKey(r) {
+    if (!r) return '';
+    const url = (r.url || '').trim().toLowerCase().replace(/\/+$/, '');
+    let user = (r.user || '').trim();
+    const pass = (r.pass || '').trim();
+
+    if (r.identityType === 'email' || user.includes('@')) {
+      user = user.toLowerCase();
+    } else if (r.identityType === 'phone') {
+      user = user.replace(/[+\s\-\.\(\)\/]/g, '');
+    } else {
+      user = user.toLowerCase();
+    }
+
+    if (url || user || pass) {
+      return `${url}\x1f${user}\x1f${pass}`;
+    }
+
+    // Fallback if no structured fields were parsed
+    return (r.content || '').trim();
+  }
 
   /**
    * Close any open RAW dropdown
@@ -106,6 +133,16 @@ const ResultsRenderer = (() => {
       filteredResults = base.filter(r => r.identityType === 'phone');
     } else {
       filteredResults = base;
+    }
+
+    streamingDedupeSeen.clear();
+    if (isDedupeActive && filteredResults.length > 0) {
+      filteredResults = filteredResults.filter(r => {
+        const key = normalizeDedupeKey(r);
+        if (streamingDedupeSeen.has(key)) return false;
+        streamingDedupeSeen.add(key);
+        return true;
+      });
     }
 
     // Clear existing nodes and any open dropdown
@@ -443,6 +480,13 @@ const ResultsRenderer = (() => {
     else if (currentViewMode === 'phone' && result.identityType !== 'phone') matchesCurrent = false;
 
     if (matchesCurrent) {
+      if (isDedupeActive) {
+        const dedupeKey = normalizeDedupeKey(result);
+        if (streamingDedupeSeen.has(dedupeKey)) {
+          return;
+        }
+        streamingDedupeSeen.add(dedupeKey);
+      }
       filteredResults.push(result);
       const newLen = filteredResults.length;
       viewport.style.height = (newLen * ROW_HEIGHT) + 'px';
@@ -466,6 +510,7 @@ const ResultsRenderer = (() => {
     filteredResults = [];
     fileMatchCounts = {};
     activeFileFilter = null;
+    streamingDedupeSeen.clear();
     counts = { raw: 0, email: 0, username: 0, phone: 0 };
     visibleNodes.forEach(node => node.remove());
     visibleNodes.clear();
@@ -926,6 +971,16 @@ const ResultsRenderer = (() => {
     setActiveFileFilter: (fileName) => {
       activeFileFilter = fileName;
       applyFilter();
+    },
+    setDedupeMode: (enabled) => {
+      isDedupeActive = Boolean(enabled);
+      applyFilter();
+    },
+    getDedupeMode: () => isDedupeActive,
+    toggleDedupeMode: () => {
+      isDedupeActive = !isDedupeActive;
+      applyFilter();
+      return isDedupeActive;
     }
   };
 })();

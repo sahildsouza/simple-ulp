@@ -521,6 +521,66 @@ a {
   margin: 0 var(--sp-1);
 }
 
+.toggle-dedupe-btn {
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 0 9px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-2);
+  user-select: none;
+}
+
+.toggle-dedupe-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+.toggle-dedupe-btn.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.toggle-dedupe-icon {
+  flex-shrink: 0;
+}
+
+.dedupe-text-full {
+  display: inline;
+}
+
+.dedupe-text-short {
+  display: none;
+}
+
+.stats-dedupe-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+  .dedupe-text-full {
+    display: none;
+  }
+  .dedupe-text-short {
+    display: inline;
+  }
+}
+
 .select-field {
   height: 28px;
   padding: 0 var(--sp-6) 0 var(--sp-2);

@@ -25,6 +25,7 @@
   const modeWord = document.getElementById('modeWord');
   const toggleCase = document.getElementById('toggleCase');
   const toggleInvert = document.getElementById('toggleInvert');
+  const toggleDedupe = document.getElementById('toggleDedupe');
   const fieldFilter = document.getElementById('fieldFilter');
   const statsText = document.getElementById('statsText');
   const emptyState = document.getElementById('emptyState');
@@ -99,6 +100,18 @@
     toggleInvert.classList.toggle('active', invertMatch);
     triggerSearch();
   });
+
+  if (toggleDedupe) {
+    toggleDedupe.addEventListener('click', () => {
+      const isDedupe = ResultsRenderer.toggleDedupeMode();
+      toggleDedupe.classList.toggle('active', isDedupe);
+      toggleDedupe.setAttribute('aria-pressed', isDedupe);
+      updateStatsText();
+      if (typeof showToast === 'function') {
+        showToast(isDedupe ? 'Duplicates hidden (showing unique records)' : 'Showing all records (including duplicates)', 'info');
+      }
+    });
+  }
 
   fieldFilter.addEventListener('change', () => {
     if (fieldFilter.value === 'url') {
@@ -229,6 +242,12 @@
       fieldFilter.value = (fieldFilter.value === 'url') ? '' : 'url';
       fieldFilter.dispatchEvent(new Event('change'));
     }
+
+    // Alt+D — toggle remove duplicates
+    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      if (toggleDedupe) toggleDedupe.click();
+    }
   });
 
   // ─── Sidebar ─────────────────────────────────
@@ -315,7 +334,9 @@
     renderFileBreakdown();
 
     if (totalRaw > 0) {
-      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${label}${filterSuffix} <span class="stats-time" style="color: var(--warning);">(stopped)</span> (${formatNumber(totalRaw)} total RAW)`;
+      const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode) ? ResultsRenderer.getDedupeMode() : false;
+      const dedupeTag = isDedupe ? ` <span class="stats-dedupe-tag">Unique</span>` : '';
+      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${label}${dedupeTag}${filterSuffix} <span class="stats-time" style="color: var(--warning);">(stopped)</span> (${formatNumber(totalRaw)} total RAW)`;
       exportBtn.style.display = '';
       showState('results');
     } else {
@@ -392,7 +413,10 @@
         const label = viewMode === 'raw' ? 'results' : `${viewMode}:pass matches`;
         const filterSuffix = activeFilter ? ` in ${activeFilter}` : '';
 
-        statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${label}${filterSuffix} <span class="stats-time">in ${stats.elapsed}</span> (${formatNumber(stats.matches)} total RAW)`;
+        const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode) ? ResultsRenderer.getDedupeMode() : false;
+        const dedupeTag = isDedupe ? ` <span class="stats-dedupe-tag">Unique</span>` : '';
+
+        statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${label}${dedupeTag}${filterSuffix} <span class="stats-time">in ${stats.elapsed}</span> (${formatNumber(stats.matches)} total RAW)`;
 
         renderFileBreakdown();
 
@@ -422,11 +446,13 @@
     const totalRaw = ResultsRenderer.getResults().length;
     const activeFilter = ResultsRenderer.getActiveFileFilter();
     const filterSuffix = activeFilter ? ` in ${activeFilter}` : '';
+    const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode) ? ResultsRenderer.getDedupeMode() : false;
+    const dedupeTag = isDedupe ? ` <span class="stats-dedupe-tag">Unique</span>` : '';
 
     if (viewMode === 'raw') {
-      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> RAW results${filterSuffix}${activeFilter ? ` (of ${formatNumber(totalRaw)} total)` : ''}`;
+      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> RAW results${dedupeTag}${filterSuffix}${activeFilter ? ` (of ${formatNumber(totalRaw)} total)` : ''}`;
     } else {
-      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${viewMode}:pass matches${filterSuffix} (of ${formatNumber(totalRaw)} total)`;
+      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${viewMode}:pass matches${dedupeTag}${filterSuffix} (of ${formatNumber(totalRaw)} total)`;
     }
   }
 

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=20">
+  <link rel="stylesheet" href="/css/style.css?v=21">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -124,6 +124,14 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                 <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
               </svg>
+            </button>
+            <button class="toggle-btn toggle-dedupe-btn" id="toggleDedupe" type="button" aria-pressed="false" title="Remove duplicates: hide rows with same URL, username/email/phone, and password (Alt+D)">
+              <svg class="toggle-dedupe-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <rect x="8" y="8" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span class="dedupe-text-full">Remove Duplicates</span>
+              <span class="dedupe-text-short">Dedup</span>
             </button>
             <select class="select-field" id="fieldFilter" title="Search field mode (Alt+U)">
               <option value="">All fields</option>
@@ -414,11 +422,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=20"></script>
-  <script src="/js/search.js?v=20"></script>
-  <script src="/js/results.js?v=20"></script>
-  <script src="/js/analytics.js?v=20"></script>
-  <script src="/js/files.js?v=20"></script>
-  <script src="/js/app.js?v=20"></script>
+  <script src="/js/memory.js?v=21"></script>
+  <script src="/js/search.js?v=21"></script>
+  <script src="/js/results.js?v=21"></script>
+  <script src="/js/analytics.js?v=21"></script>
+  <script src="/js/files.js?v=21"></script>
+  <script src="/js/app.js?v=21"></script>
 </body>
 </html>
