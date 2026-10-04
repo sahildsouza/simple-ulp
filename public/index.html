@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=12">
+  <link rel="stylesheet" href="/css/style.css?v=13">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -319,7 +319,12 @@
             <div class="col-rank">#</div>
             <div class="col-domain">Domain</div>
             <div class="col-count">Count</div>
-            <div class="col-actions">Actions</div>
+            <div class="col-actions" title="Search in Log Explorer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
           </div>
           <!-- Message inside table when empty or loading -->
           <div class="analytics-table-message" id="analyticsTableMessage">
@@ -342,11 +347,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=12"></script>
-  <script src="/js/search.js?v=12"></script>
-  <script src="/js/results.js?v=12"></script>
-  <script src="/js/analytics.js?v=12"></script>
-  <script src="/js/files.js?v=12"></script>
-  <script src="/js/app.js?v=12"></script>
+  <script src="/js/memory.js?v=13"></script>
+  <script src="/js/search.js?v=13"></script>
+  <script src="/js/results.js?v=13"></script>
+  <script src="/js/analytics.js?v=13"></script>
+  <script src="/js/files.js?v=13"></script>
+  <script src="/js/app.js?v=13"></script>
 </body>
 </html>

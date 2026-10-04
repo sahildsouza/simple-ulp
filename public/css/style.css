@@ -1397,6 +1397,7 @@ a {
 
     .col-rank {
       width: 32px;
+      min-width: 32px;
       font-size: 11px;
     }
 
@@ -1409,12 +1410,17 @@ a {
     }
 
     .col-count {
-      width: 65px;
+      width: 80px;
+      min-width: 80px;
       font-size: 12px;
+      padding-right: 8px;
+      justify-content: flex-end;
     }
 
     .col-actions {
       width: 28px;
+      min-width: 28px;
+      justify-content: center;
     }
   }
 
@@ -1971,6 +1977,7 @@ a {
   /* Columns */
   .col-rank {
     width: 44px;
+    min-width: 44px;
     font-size: var(--text-xs);
     font-family: var(--font-mono);
     color: var(--text-tertiary);
@@ -1982,7 +1989,8 @@ a {
     min-width: 0;
     display: flex;
     align-items: center;
-    padding-right: var(--sp-2);
+    padding-right: var(--sp-3);
+    overflow: hidden;
   }
 
   .analytics-domain-text {
@@ -2003,10 +2011,12 @@ a {
   }
 
   .col-count {
-    width: 80px;
+    width: 90px;
+    min-width: 90px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    padding-right: 10px;
     flex-shrink: 0;
   }
 
@@ -2015,10 +2025,12 @@ a {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
   }
 
   .col-actions {
-    width: 34px;
+    width: 32px;
+    min-width: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
