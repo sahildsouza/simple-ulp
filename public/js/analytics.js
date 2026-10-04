@@ -66,6 +66,40 @@ const AnalyticsApp = (() => {
       });
     }
 
+    // Selected files dropdown
+    const filesBtn = document.getElementById('analyticsFilesBtn');
+    const filesMenu = document.getElementById('analyticsFilesMenu');
+    const btnManageFromDropdown = document.getElementById('btnManageFilesFromDropdown');
+
+    if (filesBtn && filesMenu) {
+      filesBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = filesMenu.style.display === 'block';
+        filesMenu.style.display = isOpen ? 'none' : 'block';
+        filesBtn.setAttribute('aria-expanded', !isOpen);
+        if (!isOpen) {
+          renderSelectedFilesDropdown();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!filesMenu.contains(e.target) && !filesBtn.contains(e.target)) {
+          filesMenu.style.display = 'none';
+          filesBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    if (btnManageFromDropdown) {
+      btnManageFromDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (filesMenu) filesMenu.style.display = 'none';
+        if (filesBtn) filesBtn.setAttribute('aria-expanded', 'false');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        if (sidebarToggle) sidebarToggle.click();
+      });
+    }
+
     // Filter input
     const filterInput = document.getElementById('analyticsFilterInput');
     const btnClearFilter = document.getElementById('btnClearAnalyticsFilter');
@@ -83,16 +117,6 @@ const AnalyticsApp = (() => {
         filterInput.focus();
         applyFilter();
       });
-    }
-
-    // Copy & Export buttons
-    const btnCopy = document.getElementById('btnCopyAnalyticsList');
-    if (btnCopy) {
-      btnCopy.addEventListener('click', copyListToClipboard);
-    }
-    const btnExport = document.getElementById('btnExportAnalyticsList');
-    if (btnExport) {
-      btnExport.addEventListener('click', exportListToFile);
     }
 
     // Scroll listener for virtual scroller
@@ -190,6 +214,8 @@ const AnalyticsApp = (() => {
       badgeText.textContent = `${selected.length} files selected`;
     }
 
+    renderSelectedFilesDropdown();
+
     if (currentView === 'analytics' && !isRunning) {
       if (selected.length === 0) {
         allDomains = [];
@@ -204,6 +230,34 @@ const AnalyticsApp = (() => {
         showTableMessage('📊', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true, false);
       }
     }
+  }
+
+  /**
+   * Render list of selected files into the analytics files dropdown
+   */
+  function renderSelectedFilesDropdown() {
+    const listEl = document.getElementById('analyticsFilesList');
+    if (!listEl) return;
+    const selected = getSelectedFiles();
+    listEl.innerHTML = '';
+
+    if (selected.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'analytics-file-empty';
+      empty.textContent = 'No files selected. Click "Manage" to choose log files.';
+      listEl.appendChild(empty);
+      return;
+    }
+
+    selected.forEach(fileName => {
+      const item = document.createElement('div');
+      item.className = 'analytics-file-item';
+      item.innerHTML = `
+        <span class="analytics-file-item-icon">📄</span>
+        <span class="analytics-file-item-name" title="${fileName}">${fileName}</span>
+      `;
+      listEl.appendChild(item);
+    });
   }
 
   function showTableMessage(icon, title, desc, showRunBtn = false, showFilesBtn = false) {
@@ -249,9 +303,6 @@ const AnalyticsApp = (() => {
       return;
     }
 
-    const groupModeSelect = document.getElementById('analyticsGroupMode');
-    const groupMode = groupModeSelect ? groupModeSelect.value : 'root';
-
     isRunning = true;
     lastAnalyzedFiles = [...files];
     activeAnalyticsId = 'analytics_' + Date.now();
@@ -268,6 +319,7 @@ const AnalyticsApp = (() => {
     const btnCancel = document.getElementById('btnCancelAnalytics');
     const runText = document.getElementById('btnRunAnalyticsText');
     const statusBarText = document.getElementById('analyticsStatusText');
+    const statusIdle = document.getElementById('analyticsStatusIdle');
     const summaryBar = document.getElementById('analyticsSummary');
 
     if (btnRun) btnRun.style.display = 'none';
@@ -275,6 +327,7 @@ const AnalyticsApp = (() => {
     if (runText) runText.textContent = 'Scanning…';
 
     if (summaryBar) summaryBar.style.display = 'none';
+    if (statusIdle) statusIdle.style.display = 'flex';
     if (statusBarText) {
       statusBarText.className = 'analytics-status-text scanning';
       statusBarText.textContent = `Scanning ${files.length} file(s)…`;
@@ -305,7 +358,7 @@ const AnalyticsApp = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           files,
-          groupMode,
+          groupMode: 'full',
           analyticsId: activeAnalyticsId
         })
       });
@@ -400,19 +453,21 @@ const AnalyticsApp = (() => {
       allDomains = data.domains || [];
       topDomainCount = allDomains.length > 0 ? (allDomains[0].count || 1) : 1;
 
-      // Update summaries
+      // Update metrics chips
       const sDomains = document.getElementById('summaryTotalDomains');
       const sLines = document.getElementById('summaryTotalLines');
+      const sSpeed = document.getElementById('summarySpeed');
       const sElapsed = document.getElementById('summaryElapsed');
+      const statusIdle = document.getElementById('analyticsStatusIdle');
 
-      if (sDomains) sDomains.innerHTML = `<strong>${data.uniqueDomains.toLocaleString()}</strong> unique domains`;
-      if (sLines) sLines.innerHTML = `<strong>${data.totalLines.toLocaleString()}</strong> total lines`;
+      if (sDomains) sDomains.textContent = data.uniqueDomains.toLocaleString();
+      if (sLines) sLines.textContent = data.totalLines.toLocaleString();
+
+      const speedVal = data.linesPerSec || Math.round(data.totalLines / (parseFloat(data.elapsed) || 1));
+      if (sSpeed) sSpeed.textContent = `${speedVal.toLocaleString()} lines/s`;
       if (sElapsed) sElapsed.textContent = data.elapsed;
 
-      if (statusBarText) {
-        statusBarText.className = 'analytics-status-text';
-        statusBarText.textContent = `Scan finished in ${data.elapsed} (${(data.linesPerSec || 0).toLocaleString()} lines/s)`;
-      }
+      if (statusIdle) statusIdle.style.display = 'none';
       if (summaryBar) summaryBar.style.display = 'flex';
 
       resetRunUI();
@@ -599,21 +654,12 @@ const AnalyticsApp = (() => {
     // Count column
     const colCount = document.createElement('div');
     colCount.className = 'col-count';
-
-    // Proportion bar
-    const bar = document.createElement('div');
-    bar.className = 'analytics-count-bar';
-    const pct = Math.max(2, Math.min(100, (item.count / topDomainCount) * 100));
-    bar.style.width = `${pct}%`;
-
     const countText = document.createElement('span');
     countText.className = 'analytics-count-val';
     countText.textContent = item.count.toLocaleString();
-
-    colCount.appendChild(bar);
     colCount.appendChild(countText);
 
-    // Actions column (Search shortcut & Copy)
+    // Actions column (Search shortcut only)
     const colActions = document.createElement('div');
     colActions.className = 'col-actions';
 
@@ -621,7 +667,7 @@ const AnalyticsApp = (() => {
     btnSearch.className = 'btn-icon-xs';
     btnSearch.title = `Search "${item.domain}" in Log Explorer`;
     btnSearch.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
         <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
         <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
@@ -631,22 +677,7 @@ const AnalyticsApp = (() => {
       openInExplorer(item.domain);
     });
 
-    const btnCopyRow = document.createElement('button');
-    btnCopyRow.className = 'btn-icon-xs';
-    btnCopyRow.title = `Copy "${item.domain}: ${item.count}"`;
-    btnCopyRow.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
-      </svg>
-    `;
-    btnCopyRow.addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyTextToClipboard(`${item.domain}: ${item.count}`, `Copied ${item.domain}`);
-    });
-
     colActions.appendChild(btnSearch);
-    colActions.appendChild(btnCopyRow);
 
     row.appendChild(colRank);
     row.appendChild(colDomain);

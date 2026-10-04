@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=11">
+  <link rel="stylesheet" href="/css/style.css?v=12">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -224,16 +224,21 @@
         <!-- Analytics Top Control Bar -->
         <div class="analytics-bar">
           <div class="analytics-bar-left">
-            <div class="analytics-file-badge" id="analyticsFileBadge">
-              <span class="analytics-file-icon">📁</span>
-              <span id="analyticsFileCountText">No files selected</span>
-            </div>
-            <div class="analytics-mode-select">
-              <label for="analyticsGroupMode" class="analytics-label">Group by:</label>
-              <select id="analyticsGroupMode" class="analytics-select">
-                <option value="root">Root domain (e.g. google.com)</option>
-                <option value="exact">Exact hostname (e.g. mail.google.com)</option>
-              </select>
+            <div class="analytics-files-dropdown-wrap" id="analyticsFilesDropdownWrap">
+              <button class="analytics-files-trigger" id="analyticsFilesBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Click to view selected files">
+                <span class="analytics-file-icon">📁</span>
+                <span id="analyticsFileCountText">No files selected</span>
+                <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div class="analytics-files-menu" id="analyticsFilesMenu" style="display: none;">
+                <div class="analytics-files-menu-header">
+                  <span class="analytics-files-menu-title">Selected Log Files</span>
+                  <button class="btn btn-xs btn-secondary" id="btnManageFilesFromDropdown" type="button">Manage</button>
+                </div>
+                <div class="analytics-files-list" id="analyticsFilesList"></div>
+              </div>
             </div>
           </div>
           <div class="analytics-bar-right">
@@ -249,23 +254,10 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" id="analyticsRunIcon">
                 <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
               </svg>
-              <span id="btnRunAnalyticsText">Analyze</span>
+              <span id="btnRunAnalyticsText">Run Analytics</span>
             </button>
             <button class="btn btn-secondary btn-cancel-analytics" id="btnCancelAnalytics" style="display: none;">
               <span>Stop</span>
-            </button>
-            <button class="btn btn-sm btn-secondary" id="btnCopyAnalyticsList" title="Copy all domains and counts to clipboard">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
-              </svg>
-              <span>Copy</span>
-            </button>
-            <button class="btn btn-sm btn-secondary" id="btnExportAnalyticsList" title="Download domains list as TXT file">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span>Export</span>
             </button>
           </div>
         </div>
@@ -294,17 +286,30 @@
           </div>
         </div>
 
-        <!-- Live Progress / Summary Bar -->
-        <div class="analytics-status-bar" id="analyticsStatusBar">
-          <div class="analytics-status-left">
-            <span class="analytics-status-text" id="analyticsStatusText">Ready</span>
+        <!-- Analytics Metrics / Status Bar -->
+        <div class="analytics-metrics-bar" id="analyticsStatusBar">
+          <div class="analytics-status-idle" id="analyticsStatusIdle">
+            <span class="analytics-status-text" id="analyticsStatusText">Ready — select files and click Run Analytics</span>
           </div>
-          <div class="analytics-summary" id="analyticsSummary" style="display: none;">
-            <span class="analytics-summary-item" id="summaryTotalDomains"><strong>0</strong> unique domains</span>
-            <span class="analytics-summary-dot">•</span>
-            <span class="analytics-summary-item" id="summaryTotalLines"><strong>0</strong> total lines</span>
-            <span class="analytics-summary-dot">•</span>
-            <span class="analytics-summary-item" id="summaryElapsed">0s</span>
+          <div class="analytics-stats-chips" id="analyticsSummary" style="display: none;">
+            <div class="stat-chip stat-chip-domains" title="Unique domains extracted">
+              <span class="stat-chip-icon">🏷️</span>
+              <span class="stat-chip-val" id="summaryTotalDomains">0</span>
+              <span class="stat-chip-label">domains</span>
+            </div>
+            <div class="stat-chip stat-chip-lines" title="Total log lines processed">
+              <span class="stat-chip-icon">📄</span>
+              <span class="stat-chip-val" id="summaryTotalLines">0</span>
+              <span class="stat-chip-label">lines</span>
+            </div>
+            <div class="stat-chip stat-chip-speed" title="Processing speed">
+              <span class="stat-chip-icon">⚡</span>
+              <span class="stat-chip-val" id="summarySpeed">0 lines/s</span>
+            </div>
+            <div class="stat-chip stat-chip-time" title="Total scan duration">
+              <span class="stat-chip-icon">⏱️</span>
+              <span class="stat-chip-val" id="summaryElapsed">0s</span>
+            </div>
           </div>
         </div>
 
@@ -337,11 +342,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=11"></script>
-  <script src="/js/search.js?v=11"></script>
-  <script src="/js/results.js?v=11"></script>
-  <script src="/js/analytics.js?v=11"></script>
-  <script src="/js/files.js?v=11"></script>
-  <script src="/js/app.js?v=11"></script>
+  <script src="/js/memory.js?v=12"></script>
+  <script src="/js/search.js?v=12"></script>
+  <script src="/js/results.js?v=12"></script>
+  <script src="/js/analytics.js?v=12"></script>
+  <script src="/js/files.js?v=12"></script>
+  <script src="/js/app.js?v=12"></script>
 </body>
 </html>

@@ -820,7 +820,7 @@ function getRootDomain(hostname) {
 // ─── API: Domain Analytics (streaming) ─────────────────────
 
 app.post('/api/analytics/domains', async (req, res) => {
-  const { files = [], groupMode = 'root', analyticsId = null } = req.body;
+  const { files = [], groupMode = 'full', analyticsId = null } = req.body;
 
   if (!Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: 'No files selected for analytics' });
@@ -958,14 +958,16 @@ app.post('/api/analytics/domains', async (req, res) => {
       .map(([domain, count]) => ({ domain, count }))
       .sort((a, b) => b.count - a.count);
 
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+    const elapsedSec = (Date.now() - startTime) / 1000;
+    const linesPerSec = elapsedSec > 0 ? Math.round(totalLines / elapsedSec) : 0;
 
     if (!res.writableEnded) {
       res.write(JSON.stringify({
         type: 'complete',
         totalLines,
         uniqueDomains: sortedDomains.length,
-        elapsed: elapsed + 's',
+        linesPerSec,
+        elapsed: elapsedSec.toFixed(2) + 's',
         domains: sortedDomains
       }) + '\n');
       res.end();
