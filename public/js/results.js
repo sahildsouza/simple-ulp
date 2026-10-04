@@ -114,7 +114,7 @@ const ResultsRenderer = (() => {
   }
 
   /**
-   * Strip promotional watermarks, telegram ads, tabs, and metadata from password
+   * Strip promotional watermarks, telegram tags, tabs, and metadata from password
    */
   function cleanPassword(pass) {
     if (!pass) return '';
@@ -124,14 +124,274 @@ const ResultsRenderer = (() => {
     }
     // 2. Pipe separator with surrounding spaces: ' | ', ' |', '| '
     pass = pass.replace(/\s*\|\s*.*$/, '');
-    // 3. Arrow separators: ' ➔ ', ' -> ', ' => '
-    pass = pass.replace(/\s*[➔➜➞➝]\s*.*$/, '');
+    // 3. Arrow separators: ' ➔ ', ' -> ', ' => ', etc.
+    pass = pass.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
     pass = pass.replace(/\s+(?:->|=>)\s+.*$/, '');
     // 4. Control characters (like \u001f, \x00-\x1f)
     pass = pass.replace(/[\x00-\x1f\x7f-\x9f].*$/, '');
     // 5. Multiple spaces followed by promo text (@, t.me, http, lifetime, cloud, telegram, brackets)
     pass = pass.replace(/\s{2,}(?:[@#|~]|t\.me\/|https?:\/\/|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$/i, '');
+    // 6. Trailing unicode watermark symbols
+    pass = pass.replace(/[\s\u200B-\u200D\uFEFF]*[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ].*$/, '');
     return pass.trim();
+  }
+
+  /**
+   * Strip promotional watermarks, telegram tags, and trailing metadata
+   */
+  function stripAdSuffix(line) {
+    if (!line) return '';
+    let cleaned = line.trim();
+    if (cleaned.includes('\t')) {
+      cleaned = cleaned.split('\t')[0].trim();
+    }
+    cleaned = cleaned.replace(/\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d).*$/i, '');
+    cleaned = cleaned.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
+    cleaned = cleaned.replace(/[\t\s]+(?:->|=>)\s+.*$/, '');
+    cleaned = cleaned.replace(/[\t\s]+t\.me\/[a-zA-Z0-9_\-\.\/]+.*$/i, '');
+    cleaned = cleaned.replace(/[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$/i, '');
+    cleaned = cleaned.replace(/[\t\s]+\((?:@|t\.me)[^\)]*\).*$/i, '');
+    return cleaned.trim();
+  }
+
+  /**
+   * Classify identity string as email, phone/number, or username
+   */
+  function classifyIdentity(user) {
+    if (!user) return 'unknown';
+    user = user.trim();
+
+    // 1. Email check: contains @ with valid domain
+    if (/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(user)) {
+      return 'email';
+    }
+    if (user.includes('@') && user.indexOf('@') > 0 && user.indexOf('.', user.indexOf('@')) > user.indexOf('@') + 1) {
+      return 'email';
+    }
+
+    // 2. Number / Phone check (pure numbers or formatted numbers/IDs/phones)
+    const digits = user.replace(/\D/g, '');
+    if (digits.length >= 3) {
+      if (/^\+?[\d\s\-\.\(\)\/]{3,35}$/.test(user)) {
+        return 'phone';
+      }
+      if (/^\d{3,}$/.test(user)) {
+        return 'phone';
+      }
+    }
+
+    // 3. Otherwise: username
+    return 'username';
+  }
+
+  /**
+   * Detect non-credential banner / advertisement lines
+   */
+  function isBannerLine(line) {
+    if (!line) return false;
+    const l = line.toLowerCase().trim();
+    if (/^(?:free channel|main|gateway|backup|channel|owner|contact|vip|logs by|join)\b.*(?:t\.me|telegram|https?:)/i.test(l)) {
+      return true;
+    }
+    if (/^https?:\/\/t\.me\/[^\s:]+$/i.test(l)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Parse a standard ULP log line (url:user:password or user:password)
+   */
+  function parseLogLine(rawLine) {
+    if (!rawLine || typeof rawLine !== 'string') {
+      return { url: '', user: '', pass: '', identityType: 'unknown' };
+    }
+
+    const trimmed = rawLine.trim();
+    if (isBannerLine(trimmed)) {
+      return { url: trimmed, user: '', pass: '', identityType: 'unknown' };
+    }
+
+    const line = stripAdSuffix(trimmed);
+    if (!line) {
+      return { url: '', user: '', pass: '', identityType: 'unknown' };
+    }
+
+    // 1. Check for email pattern anywhere in line
+    const emailRegex = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/;
+    const emailMatch = line.match(emailRegex);
+
+    let isEmailCredential = false;
+    if (emailMatch) {
+      const emailIdx = emailMatch.index;
+      const beforeEmail = line.substring(0, emailIdx);
+      if (!beforeEmail.includes('://') || (beforeEmail.includes('://') && beforeEmail.indexOf('/', beforeEmail.indexOf('://') + 3) !== -1)) {
+        isEmailCredential = true;
+      }
+    }
+
+    if (isEmailCredential && emailMatch) {
+      const email = emailMatch[0];
+      const emailIdx = emailMatch.index;
+      const emailEnd = emailIdx + email.length;
+
+      let urlPart = line.substring(0, emailIdx).replace(/[:|;\s]+$/, '');
+      let passPart = line.substring(emailEnd).replace(/^[:|;\s]+/, '');
+
+      return {
+        url: urlPart,
+        user: email,
+        pass: cleanPassword(passPart),
+        identityType: 'email'
+      };
+    }
+
+    // 2. URL with protocol (http://, https://, ftp://, android://) or www.
+    const protoMatch = line.match(/^(?:([a-zA-Z0-9+.-]+:\/\/)|(www\.))/i);
+    if (protoMatch) {
+      const proto = protoMatch[0];
+      const afterProto = line.substring(proto.length);
+
+      const slashIdx = afterProto.indexOf('/');
+      let url = '';
+      let rest = '';
+
+      if (slashIdx !== -1) {
+        const colonAfterSlash = afterProto.indexOf(':', slashIdx);
+        if (colonAfterSlash !== -1) {
+          url = proto + afterProto.substring(0, colonAfterSlash);
+          rest = afterProto.substring(colonAfterSlash + 1);
+        } else {
+          url = line;
+          rest = '';
+        }
+      } else {
+        const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
+        if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
+          url = proto + portColonMatch[1] + ':' + portColonMatch[2];
+          rest = afterProto.substring(portColonMatch[0].length);
+        } else {
+          const firstColon = afterProto.indexOf(':');
+          if (firstColon !== -1) {
+            url = proto + afterProto.substring(0, firstColon);
+            rest = afterProto.substring(firstColon + 1);
+          } else {
+            url = line;
+            rest = '';
+          }
+        }
+      }
+
+      if (rest) {
+        const nextColon = rest.indexOf(':');
+        if (nextColon !== -1) {
+          const u = rest.substring(0, nextColon);
+          const p = rest.substring(nextColon + 1);
+          return {
+            url,
+            user: u,
+            pass: cleanPassword(p),
+            identityType: classifyIdentity(u)
+          };
+        } else {
+          return {
+            url,
+            user: rest,
+            pass: '',
+            identityType: classifyIdentity(rest)
+          };
+        }
+      } else {
+        return {
+          url,
+          user: '',
+          pass: '',
+          identityType: 'unknown'
+        };
+      }
+    }
+
+    // 3. Domain-based URL without protocol
+    const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^:]*)?:/);
+    if (domainMatch) {
+      const url = domainMatch[1] + (domainMatch[2] || '');
+      const rest = line.substring(domainMatch[0].length);
+      const nextColon = rest.indexOf(':');
+      if (nextColon !== -1) {
+        const u = rest.substring(0, nextColon);
+        const p = rest.substring(nextColon + 1);
+        return {
+          url,
+          user: u,
+          pass: cleanPassword(p),
+          identityType: classifyIdentity(u)
+        };
+      } else {
+        return {
+          url,
+          user: rest,
+          pass: '',
+          identityType: classifyIdentity(rest)
+        };
+      }
+    }
+
+    // 4. Pipe or Semicolon delimited
+    if (!line.includes(':')) {
+      if (line.includes('|')) {
+        const parts = line.split('|').map(p => p.trim());
+        if (parts.length >= 3) {
+          return { url: parts[0], user: parts[1], pass: cleanPassword(parts.slice(2).join('|')), identityType: classifyIdentity(parts[1]) };
+        } else if (parts.length === 2) {
+          return { url: '', user: parts[0], pass: cleanPassword(parts[1]), identityType: classifyIdentity(parts[0]) };
+        }
+      }
+      if (line.includes(';')) {
+        const parts = line.split(';').map(p => p.trim());
+        if (parts.length >= 3) {
+          return { url: parts[0], user: parts[1], pass: cleanPassword(parts.slice(2).join(';')), identityType: classifyIdentity(parts[1]) };
+        } else if (parts.length === 2) {
+          return { url: '', user: parts[0], pass: cleanPassword(parts[1]), identityType: classifyIdentity(parts[0]) };
+        }
+      }
+    }
+
+    // 5. Standard colon split
+    const firstColon = line.indexOf(':');
+    if (firstColon === -1) {
+      return { url: line, user: '', pass: '', identityType: 'unknown' };
+    }
+
+    const firstPart = line.substring(0, firstColon);
+    const remaining = line.substring(firstColon + 1);
+
+    if (firstPart.includes('/') || firstPart.includes('.')) {
+      const secondColon = remaining.indexOf(':');
+      if (secondColon !== -1) {
+        const u = remaining.substring(0, secondColon);
+        const p = remaining.substring(secondColon + 1);
+        return {
+          url: firstPart,
+          user: u,
+          pass: cleanPassword(p),
+          identityType: classifyIdentity(u)
+        };
+      } else {
+        return {
+          url: firstPart,
+          user: remaining,
+          pass: '',
+          identityType: classifyIdentity(remaining)
+        };
+      }
+    }
+
+    return {
+      url: '',
+      user: firstPart,
+      pass: cleanPassword(remaining),
+      identityType: classifyIdentity(firstPart)
+    };
   }
 
   /**
@@ -141,10 +401,18 @@ const ResultsRenderer = (() => {
     allResults = data || [];
     multiFileMode = isMultiFile;
 
-    // Recalculate counts
+    // Re-parse and recalculate counts
     counts = { raw: allResults.length, email: 0, username: 0, phone: 0 };
     for (const r of allResults) {
-      if (r.pass) r.pass = cleanPassword(r.pass);
+      if (r.content) {
+        const parsed = parseLogLine(r.content);
+        r.url = parsed.url;
+        r.user = parsed.user;
+        r.pass = parsed.pass;
+        r.identityType = parsed.identityType;
+      } else if (r.pass) {
+        r.pass = cleanPassword(r.pass);
+      }
       if (r.identityType === 'email') counts.email++;
       else if (r.identityType === 'username') counts.username++;
       else if (r.identityType === 'phone') counts.phone++;
@@ -157,7 +425,15 @@ const ResultsRenderer = (() => {
    * Append results incrementally during streaming
    */
   function appendResult(result) {
-    if (result.pass) result.pass = cleanPassword(result.pass);
+    if (result.content) {
+      const parsed = parseLogLine(result.content);
+      result.url = parsed.url;
+      result.user = parsed.user;
+      result.pass = parsed.pass;
+      result.identityType = parsed.identityType;
+    } else if (result.pass) {
+      result.pass = cleanPassword(result.pass);
+    }
     allResults.push(result);
     counts.raw++;
     if (result.identityType === 'email') counts.email++;
