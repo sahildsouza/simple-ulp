@@ -72,44 +72,187 @@ function estimateLineCount(sizeBytes, avgLineLen = 67) {
 }
 
 /**
- * Classify identity string as email, phone, or username
+ * Strip promotional watermarks, telegram tags, and trailing metadata
+ */
+function stripAdSuffix(line) {
+  if (!line) return '';
+  return line
+    .replace(/[\t\s]+[➔➜➞➝]\s*.*$/, '')
+    .replace(/[\t\s]+(?:->|=>)\s+.*$/, '')
+    .replace(/[\t\s]+\|\s*[@t].*$/i, '')
+    .replace(/[\t\s]+t\.me\/[a-zA-Z0-9_\-\.\/]+.*$/i, '')
+    .replace(/[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$/i, '')
+    .replace(/[\t\s]+\((?:@|t\.me)[^\)]*\).*$/i, '')
+    .trim();
+}
+
+/**
+ * Classify identity string as email, phone/number, or username
  */
 function classifyIdentity(user) {
   if (!user) return 'unknown';
-  if (user.includes('@') && user.indexOf('@') > 0 && user.indexOf('.', user.indexOf('@')) > 0) {
+  user = user.trim();
+
+  // 1. Email check: contains @ with valid domain
+  if (/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(user)) {
     return 'email';
   }
-  if (/^\+?[0-9\-\.\(\)\s]{7,18}$/.test(user) && (user.match(/\d/g) || []).length >= 7) {
-    return 'phone';
+  if (user.includes('@') && user.indexOf('@') > 0 && user.indexOf('.', user.indexOf('@')) > user.indexOf('@') + 1) {
+    return 'email';
   }
+
+  // 2. Number / Phone check (pure numbers or formatted numbers/IDs/phones):
+  // Covers: 261203, 15900723, 716.242.521-68, 042309-295974-1731, 01001486512, +1234567890
+  const digits = user.replace(/\D/g, '');
+  if (digits.length >= 3) {
+    if (/^\+?[\d\s\-\.\(\)\/]{3,35}$/.test(user)) {
+      return 'phone';
+    }
+    if (/^\d{3,}$/.test(user)) {
+      return 'phone';
+    }
+  }
+
+  // 3. Otherwise: username
   return 'username';
 }
 
 /**
- * Parse a standard 3-field ULP log line (url:user:password)
+ * Parse a standard ULP log line (url:user:password or user:password)
+ * Handles dirty lines, telegram ads, emails, URLs with ports/paths, numbers, and multiple delimiters.
  */
-function parseLogLine(line) {
-  const lastColon = line.lastIndexOf(':');
-  if (lastColon === -1) {
+function parseLogLine(rawLine) {
+  if (!rawLine || typeof rawLine !== 'string') {
+    return { url: '', user: '', pass: '', identityType: 'unknown' };
+  }
+
+  const line = stripAdSuffix(rawLine.trim());
+  if (!line) {
+    return { url: '', user: '', pass: '', identityType: 'unknown' };
+  }
+
+  // 1. Check for email pattern anywhere in line (Highest confidence)
+  const emailRegex = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/;
+  const emailMatch = line.match(emailRegex);
+
+  if (emailMatch) {
+    const email = emailMatch[0];
+    const emailIdx = emailMatch.index;
+    const emailEnd = emailIdx + email.length;
+
+    // URL is everything before the email (excluding separator colon/pipe/semicolon/space)
+    let urlPart = line.substring(0, emailIdx).replace(/[:|;\s]+$/, '');
+    // Pass is everything after the email (excluding separator colon/pipe/semicolon/space)
+    let passPart = line.substring(emailEnd).replace(/^[:|;\s]+/, '');
+
+    return {
+      url: urlPart,
+      user: email,
+      pass: passPart,
+      identityType: 'email'
+    };
+  }
+
+  // 2. URL with protocol (http://, https://, ftp://, android://) or www.
+  const urlProtoMatch = line.match(/^(?:(?:[a-zA-Z0-9+.-]+:\/\/)|(?:www\.))[^:]*(?::\d+\/?[^:]*)?:/i);
+  if (urlProtoMatch) {
+    const urlSepIdx = urlProtoMatch[0].length - 1;
+    const url = line.substring(0, urlSepIdx);
+    const rest = line.substring(urlSepIdx + 1);
+
+    const nextColon = rest.indexOf(':');
+    if (nextColon !== -1) {
+      const u = rest.substring(0, nextColon);
+      const p = rest.substring(nextColon + 1);
+      return {
+        url,
+        user: u,
+        pass: p,
+        identityType: classifyIdentity(u)
+      };
+    } else {
+      return {
+        url,
+        user: rest,
+        pass: '',
+        identityType: classifyIdentity(rest)
+      };
+    }
+  }
+
+  // 3. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com:12321/:user:pass)
+  const domainColonMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+(?::\d+)?(?:\/[^:]*)?):/);
+  if (domainColonMatch) {
+    const url = domainColonMatch[1];
+    const rest = line.substring(domainColonMatch[0].length);
+    const nextColon = rest.indexOf(':');
+    if (nextColon !== -1) {
+      const u = rest.substring(0, nextColon);
+      const p = rest.substring(nextColon + 1);
+      return {
+        url,
+        user: u,
+        pass: p,
+        identityType: classifyIdentity(u)
+      };
+    } else {
+      return {
+        url,
+        user: rest,
+        pass: '',
+        identityType: classifyIdentity(rest)
+      };
+    }
+  }
+
+  // 4. Pipe or Semicolon delimited if no colons
+  if (!line.includes(':')) {
+    if (line.includes('|')) {
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length >= 3) {
+        return { url: parts[0], user: parts[1], pass: parts.slice(2).join('|'), identityType: classifyIdentity(parts[1]) };
+      } else if (parts.length === 2) {
+        return { url: '', user: parts[0], pass: parts[1], identityType: classifyIdentity(parts[0]) };
+      }
+    }
+    if (line.includes(';')) {
+      const parts = line.split(';').map(p => p.trim());
+      if (parts.length >= 3) {
+        return { url: parts[0], user: parts[1], pass: parts.slice(2).join(';'), identityType: classifyIdentity(parts[1]) };
+      } else if (parts.length === 2) {
+        return { url: '', user: parts[0], pass: parts[1], identityType: classifyIdentity(parts[0]) };
+      }
+    }
+  }
+
+  // 5. Standard colon split
+  const firstColon = line.indexOf(':');
+  if (firstColon === -1) {
     return { url: line, user: '', pass: '', identityType: 'unknown' };
   }
-  const secondLastColon = line.lastIndexOf(':', lastColon - 1);
-  if (secondLastColon === -1) {
-    const u = line.substring(0, lastColon);
+
+  const lastColon = line.lastIndexOf(':');
+  if (firstColon === lastColon) {
+    const u = line.substring(0, firstColon);
+    const p = line.substring(firstColon + 1);
     return {
       url: '',
       user: u,
-      pass: line.substring(lastColon + 1),
+      pass: p,
+      identityType: classifyIdentity(u)
+    };
+  } else {
+    const secondLastColon = line.lastIndexOf(':', lastColon - 1);
+    const u = line.substring(secondLastColon + 1, lastColon);
+    const p = line.substring(lastColon + 1);
+    const url = line.substring(0, secondLastColon);
+    return {
+      url,
+      user: u,
+      pass: p,
       identityType: classifyIdentity(u)
     };
   }
-  const u = line.substring(secondLastColon + 1, lastColon);
-  return {
-    url: line.substring(0, secondLastColon),
-    user: u,
-    pass: line.substring(lastColon + 1),
-    identityType: classifyIdentity(u)
-  };
 }
 
 // ─── API: List files ──────────────────────────────────────
@@ -484,16 +627,16 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
 
     switch (fieldFilter) {
       case 'url':
-        // Match query anywhere in the URL segment (up to user:pass, handles ports)
-        searchQuery = `^[^:\r\n]*(:[0-9]{1,5})?[^:\r\n]*${pattern}[^:\r\n]*:`;
+        // Match query anywhere in the URL segment
+        searchQuery = `^(?:[a-zA-Z0-9+.-]+:\\/\\/)?[^:\r\n]*${pattern}[^:\r\n]*:`;
         break;
       case 'username':
-        // Match query in the second field
-        searchQuery = `^[^:\r\n]*:[^:\r\n]*${pattern}[^:\r\n]*:`;
+        // Match query in username/email/number field (handles url:user:pass, user:pass, http://)
+        searchQuery = `(?:^|:)[^:\r\n]*${pattern}[^:\r\n]*:`;
         break;
       case 'password':
-        // Match query in the third field (after second colon)
-        searchQuery = `^[^:\r\n]*:[^:\r\n]*:.*${pattern}`;
+        // Match query in password field
+        searchQuery = `:[^:\r\n]*${pattern}`;
         break;
     }
   }

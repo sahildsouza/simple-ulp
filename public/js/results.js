@@ -410,7 +410,7 @@ const ResultsRenderer = (() => {
     }
 
     identityPill.innerHTML = `<span>${iconText}</span> <span class="cred-text">${escapeHtml(result.user || '—')}</span>`;
-    identityPill.title = `Click to copy ${typeName} only`;
+    identityPill.title = `Click to copy ${typeName}: ${result.user || '—'}`;
 
     // Click on identity -> copies identity only
     identityPill.addEventListener('click', (e) => {
@@ -434,7 +434,7 @@ const ResultsRenderer = (() => {
     if (isPassCopied) passPill.classList.add('is-copied');
 
     passPill.innerHTML = `<span>🔑</span> <span class="cred-text">${escapeHtml(result.pass || '—')}</span>`;
-    passPill.title = 'Click to copy password only';
+    passPill.title = `Click to copy password: ${result.pass || '—'}`;
 
     // Click on pass -> copies password only
     passPill.addEventListener('click', (e) => {

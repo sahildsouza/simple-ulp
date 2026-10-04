@@ -872,10 +872,16 @@ a {
   .cred-pills {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex: 1;
     min-width: 0;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .cred-pills::-webkit-scrollbar {
+    display: none;
   }
 
   .cred-pill {
@@ -892,10 +898,12 @@ a {
     cursor: pointer;
     transition: all var(--duration-fast);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 48%;
-    user-select: none;
+    user-select: text;
+    flex-shrink: 0;
+  }
+
+  .cred-text {
+    white-space: nowrap;
   }
 
   .cred-pill:hover {
@@ -1312,8 +1320,7 @@ a {
     }
 
     .cred-pill {
-      max-width: 44%;
-      padding: 3px 6px;
+      padding: 3px 8px;
       font-size: 11px;
     }
 
