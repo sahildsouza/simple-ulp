@@ -16,6 +16,7 @@ const AnalyticsApp = (() => {
   let filteredDomains = []; // Filtered by search box or live preview
   let topDomainCount = 1;
   let lastAnalyzedFiles = [];
+  let cachedFilesMap = new Map(); // fileName -> cacheInfo
 
   let sortColumn = 'count'; // 'count' | 'domain'
   let sortDirection = 'desc'; // 'desc' | 'asc'
@@ -24,6 +25,32 @@ const AnalyticsApp = (() => {
   let scrollContainer = null;
   let viewport = null;
   let visibleNodes = new Map();
+
+  /**
+   * Check cache status of selected log files
+   */
+  async function checkCacheStatus(files) {
+    if (!files || files.length === 0) {
+      cachedFilesMap.clear();
+      return { allCached: false, cachedCount: 0, totalFiles: 0 };
+    }
+    try {
+      const res = await fetch('/api/analytics/cache-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        cachedFilesMap.clear();
+        (data.files || []).forEach(f => {
+          cachedFilesMap.set(f.name, f);
+        });
+        return data;
+      }
+    } catch (_) {}
+    return { allCached: false, cachedCount: 0, totalFiles: files.length };
+  }
 
   /**
    * Initialize Analytics module
@@ -46,10 +73,14 @@ const AnalyticsApp = (() => {
       navAnalytics.addEventListener('click', () => switchView('analytics'));
     }
 
-    // Run / Cancel buttons
+    // Run / Re-scan / Cancel buttons
     const btnRun = document.getElementById('btnRunAnalytics');
     if (btnRun) {
-      btnRun.addEventListener('click', () => startAnalytics());
+      btnRun.addEventListener('click', () => startAnalytics(false));
+    }
+    const btnRescan = document.getElementById('btnRescanAnalytics');
+    if (btnRescan) {
+      btnRescan.addEventListener('click', () => startAnalytics(true));
     }
     const btnCancel = document.getElementById('btnCancelAnalytics');
     if (btnCancel) {
@@ -230,7 +261,7 @@ const AnalyticsApp = (() => {
   /**
    * Update the file count badge in analytics toolbar
    */
-  function updateFileBadge() {
+  async function updateFileBadge() {
     const badgeText = document.getElementById('analyticsFileCountText');
     if (!badgeText) return;
 
@@ -253,10 +284,24 @@ const AnalyticsApp = (() => {
         visibleNodes.clear();
         if (viewport) viewport.style.height = '0px';
         showTableMessage('folder', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.', false, true);
-      } else if (!filesEqual(selected, lastAnalyzedFiles)) {
-        // Files changed: prompt user to run analytics (DO NOT auto-scan)
-        const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
-        showTableMessage('analytics', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true, false);
+        return;
+      }
+
+      // Check if cache is available for selected files
+      const cacheStatus = await checkCacheStatus(selected);
+      renderSelectedFilesDropdown(); // re-render with stored badges
+
+      if (allDomains.length > 0 && filesEqual(selected, lastAnalyzedFiles)) {
+        hideTableMessage();
+        requestAnimationFrame(renderVisible);
+        return;
+      }
+
+      const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
+      if (cacheStatus.allCached) {
+        showTableMessage('analytics', 'Log Scan Data Stored', `Selected: ${desc}. Domain scan data is already stored. Click "Run Analytics" to load instantly without re-scanning.`, true, false, 'View Stored Analytics (Instant)');
+      } else {
+        showTableMessage('analytics', 'Ready for Log Domain Analytics', `Selected: ${desc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
       }
     }
   }
@@ -279,11 +324,13 @@ const AnalyticsApp = (() => {
     }
 
     selected.forEach(fileName => {
+      const isCached = cachedFilesMap.get(fileName)?.cached;
       const item = document.createElement('div');
       item.className = 'analytics-file-item';
       item.innerHTML = `
         <svg class="analytics-file-item-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="analytics-file-item-name" title="${fileName}">${fileName}</span>
+        ${isCached ? '<span class="analytics-file-cached-badge" title="Scan data is stored on disk (no re-scan needed)">Stored</span>' : ''}
       `;
       listEl.appendChild(item);
     });
@@ -311,7 +358,7 @@ const AnalyticsApp = (() => {
     }
   }
 
-  function showTableMessage(iconType, title, desc, showRunBtn = false, showFilesBtn = false) {
+  function showTableMessage(iconType, title, desc, showRunBtn = false, showFilesBtn = false, runBtnText = 'Run Analytics Now') {
     const msgEl = document.getElementById('analyticsTableMessage');
     const iconEl = document.getElementById('analyticsMsgIcon');
     const titleEl = document.getElementById('analyticsMsgTitle');
@@ -325,7 +372,7 @@ const AnalyticsApp = (() => {
     if (descEl) descEl.textContent = desc;
     if (btnInside) {
       btnInside.style.display = showRunBtn ? 'inline-flex' : 'none';
-      btnInside.textContent = 'Run Analytics Now';
+      btnInside.textContent = runBtnText;
     }
     if (btnSelectFiles) {
       btnSelectFiles.style.display = showFilesBtn ? 'inline-flex' : 'none';
@@ -342,7 +389,7 @@ const AnalyticsApp = (() => {
   /**
    * Start domain analytics run with live progress bar
    */
-  async function startAnalytics() {
+  async function startAnalytics(forceRefresh = false) {
     if (isRunning) return;
 
     const files = getSelectedFiles();
@@ -368,20 +415,24 @@ const AnalyticsApp = (() => {
     // Toolbar buttons
     const btnRun = document.getElementById('btnRunAnalytics');
     const btnCancel = document.getElementById('btnCancelAnalytics');
+    const btnRescan = document.getElementById('btnRescanAnalytics');
     const runText = document.getElementById('btnRunAnalyticsText');
     const statusBarText = document.getElementById('analyticsStatusText');
     const statusIdle = document.getElementById('analyticsStatusIdle');
     const summaryBar = document.getElementById('analyticsSummary');
 
     if (btnRun) btnRun.style.display = 'none';
+    if (btnRescan) btnRescan.style.display = 'none';
     if (btnCancel) btnCancel.style.display = 'inline-flex';
-    if (runText) runText.textContent = 'Scanning…';
+    if (runText) runText.textContent = forceRefresh ? 'Re-scanning…' : 'Scanning…';
 
     if (summaryBar) summaryBar.style.display = 'none';
     if (statusIdle) statusIdle.style.display = 'flex';
     if (statusBarText) {
       statusBarText.className = 'analytics-status-text scanning';
-      statusBarText.textContent = `Scanning ${files.length} file(s)…`;
+      statusBarText.textContent = forceRefresh
+        ? `Re-scanning ${files.length} file(s) from disk…`
+        : `Loading ${files.length} file(s)…`;
     }
 
     // Show Live Progress Banner
@@ -395,13 +446,15 @@ const AnalyticsApp = (() => {
 
     if (liveBanner) liveBanner.style.display = 'flex';
     if (liveBar) liveBar.style.width = '0%';
-    if (liveTitle) liveTitle.textContent = `Starting scan on ${files.length} file(s)…`;
+    if (liveTitle) liveTitle.textContent = forceRefresh
+      ? `Re-scanning ${files.length} file(s) from disk…`
+      : `Preparing scan on ${files.length} file(s)…`;
     if (liveSpeed) liveSpeed.textContent = '0 lines/s';
     if (liveElapsed) liveElapsed.textContent = '0.0s';
     if (liveDomains) liveDomains.textContent = '0 unique domains';
-    if (liveSub) liveSub.textContent = 'Reading files…';
+    if (liveSub) liveSub.textContent = 'Checking stored cache…';
 
-    showTableMessage('loading', 'Scanning in Progress…', `Reading ${files.length} selected log file(s) with live domain streaming…`);
+    showTableMessage('loading', forceRefresh ? 'Re-scanning in Progress…' : 'Processing Log Analytics…', `Checking stored scan data and analyzing ${files.length} file(s)…`);
 
     try {
       const res = await fetch('/api/analytics/domains', {
@@ -410,7 +463,8 @@ const AnalyticsApp = (() => {
         body: JSON.stringify({
           files,
           groupMode: 'full',
-          analyticsId: activeAnalyticsId
+          analyticsId: activeAnalyticsId,
+          forceRefresh: Boolean(forceRefresh)
         })
       });
 
@@ -527,8 +581,17 @@ const AnalyticsApp = (() => {
         applyFilter();
       }
 
+      // Update cache status map for scanned files
+      if (Array.isArray(lastAnalyzedFiles)) {
+        lastAnalyzedFiles.forEach(f => {
+          cachedFilesMap.set(f, { name: f, cached: true });
+        });
+        renderSelectedFilesDropdown();
+      }
+
       if (typeof showToast === 'function') {
-        showToast(`Analytics complete: ${data.uniqueDomains.toLocaleString()} domains in ${data.elapsed}`, 'success');
+        const cacheNotice = data.fromCache ? ' (stored cache)' : ' (stored to cache)';
+        showToast(`Analytics complete: ${data.uniqueDomains.toLocaleString()} domains in ${data.elapsed}${cacheNotice}`, 'success');
       }
     } else if (data.type === 'aborted') {
       const liveBanner = document.getElementById('analyticsLiveBanner');
@@ -580,11 +643,13 @@ const AnalyticsApp = (() => {
 
     const btnRun = document.getElementById('btnRunAnalytics');
     const btnCancel = document.getElementById('btnCancelAnalytics');
+    const btnRescan = document.getElementById('btnRescanAnalytics');
     const runText = document.getElementById('btnRunAnalyticsText');
 
     if (btnRun) btnRun.style.display = 'inline-flex';
     if (btnCancel) btnCancel.style.display = 'none';
     if (runText) runText.textContent = 'Run Analytics';
+    if (btnRescan) btnRescan.style.display = (allDomains.length > 0) ? 'inline-flex' : 'none';
   }
 
   /**

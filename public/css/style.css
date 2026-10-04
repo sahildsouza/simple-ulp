@@ -1937,6 +1937,20 @@ a {
     color: var(--text-tertiary);
   }
 
+  .analytics-file-cached-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    margin-left: auto;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+
   .analytics-bar-right {
     display: flex;
     align-items: center;
@@ -1959,6 +1973,27 @@ a {
 
   .btn-run-analytics:hover {
     filter: brightness(1.1);
+  }
+
+  .btn-rescan-analytics {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    padding: 5px 11px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
+    background: var(--surface-2);
+    cursor: pointer;
+    transition: all var(--duration-fast);
+  }
+
+  .btn-rescan-analytics:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
   }
 
   .btn-cancel-analytics {

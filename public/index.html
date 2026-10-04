@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=16">
+  <link rel="stylesheet" href="/css/style.css?v=17">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -291,6 +291,13 @@
               </svg>
               <span id="btnRunAnalyticsText">Run Analytics</span>
             </button>
+            <button class="btn btn-secondary btn-rescan-analytics" id="btnRescanAnalytics" style="display: none;" title="Force a fresh scan from disk (bypass stored cache)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M23 4v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Re-scan</span>
+            </button>
             <button class="btn btn-secondary btn-cancel-analytics" id="btnCancelAnalytics" style="display: none;">
               <span>Stop</span>
             </button>
@@ -387,11 +394,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=16"></script>
-  <script src="/js/search.js?v=16"></script>
-  <script src="/js/results.js?v=16"></script>
-  <script src="/js/analytics.js?v=16"></script>
-  <script src="/js/files.js?v=16"></script>
-  <script src="/js/app.js?v=16"></script>
+  <script src="/js/memory.js?v=17"></script>
+  <script src="/js/search.js?v=17"></script>
+  <script src="/js/results.js?v=17"></script>
+  <script src="/js/analytics.js?v=17"></script>
+  <script src="/js/files.js?v=17"></script>
+  <script src="/js/app.js?v=17"></script>
 </body>
 </html>

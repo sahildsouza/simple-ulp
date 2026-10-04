@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const readline = require('readline');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -817,25 +818,145 @@ function getRootDomain(hostname) {
   return parts.slice(-2).join('.');
 }
 
-// ─── API: Domain Analytics (streaming) ─────────────────────
+// ─── Domain Extraction & Analytics Persistent Cache ─────────
+
+const ANALYTICS_CACHE_DIR = path.join(__dirname, '.analytics_cache');
+if (!fs.existsSync(ANALYTICS_CACHE_DIR)) {
+  try {
+    fs.mkdirSync(ANALYTICS_CACHE_DIR, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create analytics cache dir:', err);
+  }
+}
+
+// In-memory cache for ultra-fast access: resolvedPath -> cacheData
+const memoryAnalyticsCache = new Map();
+
+function getCacheKey(resolvedPath) {
+  return crypto.createHash('sha256').update(resolvedPath).digest('hex');
+}
+
+function getCacheFilePath(resolvedPath) {
+  return path.join(ANALYTICS_CACHE_DIR, `${getCacheKey(resolvedPath)}.json`);
+}
+
+function getCachedFileAnalytics(resolvedPath, stat) {
+  // 1. Check in-memory cache first
+  if (memoryAnalyticsCache.has(resolvedPath)) {
+    const mem = memoryAnalyticsCache.get(resolvedPath);
+    if (mem && mem.size === stat.size && Math.abs(mem.mtimeMs - stat.mtimeMs) < 2) {
+      return mem;
+    }
+    memoryAnalyticsCache.delete(resolvedPath);
+  }
+
+  // 2. Check disk cache
+  const cachePath = getCacheFilePath(resolvedPath);
+  if (fs.existsSync(cachePath)) {
+    try {
+      const raw = fs.readFileSync(cachePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && data.size === stat.size && Math.abs(data.mtimeMs - stat.mtimeMs) < 2 && data.domainCounts) {
+        if (!data.sortedDomains) {
+          data.sortedDomains = Object.entries(data.domainCounts)
+            .map(([domain, count]) => ({ domain, count }))
+            .sort((a, b) => b.count - a.count);
+        }
+        memoryAnalyticsCache.set(resolvedPath, data);
+        return data;
+      }
+    } catch (_) {
+      // Corrupt or unreadable cache file
+    }
+  }
+
+  return null;
+}
+
+async function saveFileAnalyticsCache(resolvedPath, stat, totalLines, fileDomainMap) {
+  try {
+    const domainCounts = {};
+    const sortedDomains = [];
+    for (const [domain, count] of fileDomainMap.entries()) {
+      domainCounts[domain] = count;
+      sortedDomains.push({ domain, count });
+    }
+    sortedDomains.sort((a, b) => b.count - a.count);
+
+    const cacheData = {
+      version: 1,
+      filePath: resolvedPath,
+      fileName: path.basename(resolvedPath),
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      totalLines,
+      uniqueDomains: sortedDomains.length,
+      scannedAt: Date.now(),
+      domainCounts,
+      sortedDomains
+    };
+
+    memoryAnalyticsCache.set(resolvedPath, cacheData);
+
+    const cachePath = getCacheFilePath(resolvedPath);
+    await fs.promises.writeFile(cachePath, JSON.stringify(cacheData), 'utf8');
+  } catch (err) {
+    console.error('Failed to save analytics cache:', err);
+  }
+}
+
+function clearAnalyticsCache(resolvedPath = null) {
+  if (resolvedPath) {
+    memoryAnalyticsCache.delete(resolvedPath);
+    const p = getCacheFilePath(resolvedPath);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); } catch (_) {}
+    }
+  } else {
+    memoryAnalyticsCache.clear();
+    if (fs.existsSync(ANALYTICS_CACHE_DIR)) {
+      try {
+        const files = fs.readdirSync(ANALYTICS_CACHE_DIR);
+        for (const f of files) {
+          if (f.endsWith('.json')) {
+            fs.unlinkSync(path.join(ANALYTICS_CACHE_DIR, f));
+          }
+        }
+      } catch (_) {}
+    }
+  }
+}
+
+function aggregateRootDomains(domainCounts) {
+  const rootMap = new Map();
+  for (const [host, count] of Object.entries(domainCounts)) {
+    const root = getRootDomain(host);
+    if (root) {
+      rootMap.set(root, (rootMap.get(root) || 0) + count);
+    }
+  }
+  return Array.from(rootMap.entries())
+    .map(([domain, count]) => ({ domain, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// ─── API: Domain Analytics (streaming with persistent cache) ─────────
 
 app.post('/api/analytics/domains', async (req, res) => {
-  const { files = [], groupMode = 'full', analyticsId = null } = req.body;
+  const { files = [], groupMode = 'full', analyticsId = null, forceRefresh = false } = req.body;
 
   if (!Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: 'No files selected for analytics' });
   }
 
-  const filePaths = [];
-  let totalBytes = 0;
+  const fileInfos = [];
   for (const f of files) {
     const p = resolveLogPath(f);
     if (!p || !fs.existsSync(p)) {
       return res.status(400).json({ error: `Invalid or missing file: ${f}` });
     }
     const stat = fs.statSync(p);
-    totalBytes += stat.size;
-    filePaths.push({ name: f, path: p, size: stat.size });
+    fileInfos.push({ name: f, path: p, stat, size: stat.size });
   }
 
   // Abort previous run with same ID
@@ -857,19 +978,131 @@ app.post('/api/analytics/domains', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  const startTime = Date.now();
+
+  // Split into cached vs uncached files
+  const cachedList = [];
+  const uncachedList = [];
+  let totalBytesToScan = 0;
+
+  for (const info of fileInfos) {
+    const cached = (!forceRefresh) ? getCachedFileAnalytics(info.path, info.stat) : null;
+    if (cached) {
+      cachedList.push({ ...info, cached });
+    } else {
+      uncachedList.push(info);
+      totalBytesToScan += info.size;
+    }
+  }
+
+  // FAST PATH: All requested files are already cached!
+  if (uncachedList.length === 0) {
+    if (analyticsId) activeAnalytics.delete(analyticsId);
+
+    // If only 1 file is selected:
+    if (cachedList.length === 1) {
+      const data = cachedList[0].cached;
+      const sorted = (groupMode === 'root')
+        ? aggregateRootDomains(data.domainCounts)
+        : data.sortedDomains;
+      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
+
+      if (!res.writableEnded) {
+        res.write(JSON.stringify({
+          type: 'progress',
+          percent: 100,
+          currentFile: cachedList[0].name,
+          totalLines: data.totalLines,
+          uniqueDomains: sorted.length,
+          elapsed: elapsedSec + 's',
+          topDomains: sorted.slice(0, 35)
+        }) + '\n');
+
+        res.write(JSON.stringify({
+          type: 'complete',
+          totalLines: data.totalLines,
+          uniqueDomains: sorted.length,
+          linesPerSec: 0,
+          elapsed: elapsedSec + 's',
+          fromCache: true,
+          cachedFiles: [cachedList[0].name],
+          domains: sorted
+        }) + '\n');
+        res.end();
+      }
+      return;
+    }
+
+    // Multiple files, all cached: merge domain counts
+    let totalLines = 0;
+    const domainMap = new Map();
+    for (const item of cachedList) {
+      totalLines += item.cached.totalLines;
+      for (const [host, count] of Object.entries(item.cached.domainCounts)) {
+        const key = (groupMode === 'root') ? getRootDomain(host) : host;
+        if (key) {
+          domainMap.set(key, (domainMap.get(key) || 0) + count);
+        }
+      }
+    }
+
+    const sortedDomains = Array.from(domainMap.entries())
+      .map(([domain, count]) => ({ domain, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    if (!res.writableEnded) {
+      res.write(JSON.stringify({
+        type: 'progress',
+        percent: 100,
+        currentFile: `${cachedList.length} files (stored cache)`,
+        totalLines,
+        uniqueDomains: sortedDomains.length,
+        elapsed: elapsedSec + 's',
+        topDomains: sortedDomains.slice(0, 35)
+      }) + '\n');
+
+      res.write(JSON.stringify({
+        type: 'complete',
+        totalLines,
+        uniqueDomains: sortedDomains.length,
+        linesPerSec: 0,
+        elapsed: elapsedSec + 's',
+        fromCache: true,
+        cachedFiles: cachedList.map(c => c.name),
+        domains: sortedDomains
+      }) + '\n');
+      res.end();
+    }
+    return;
+  }
+
+  // PARTIAL or FULL SCAN: Some or all files need scanning
   const domainMap = new Map();
   let totalLines = 0;
-  let processedBytes = 0;
-  const startTime = Date.now();
+  let processedScanBytes = 0;
   let lastProgressTime = Date.now();
+
+  // 1. Preload any cached files into domainMap
+  for (const item of cachedList) {
+    totalLines += item.cached.totalLines;
+    for (const [host, count] of Object.entries(item.cached.domainCounts)) {
+      const key = (groupMode === 'root') ? getRootDomain(host) : host;
+      if (key) {
+        domainMap.set(key, (domainMap.get(key) || 0) + count);
+      }
+    }
+  }
 
   // Online top 35 domains tracking for live streaming
   let topList = [];
   let minTopCount = 0;
 
-  function recordDomain(key) {
+  function recordDomain(key, fileDomainMap) {
     const count = (domainMap.get(key) || 0) + 1;
     domainMap.set(key, count);
+    fileDomainMap.set(key, (fileDomainMap.get(key) || 0) + 1);
 
     if (count >= minTopCount || topList.length < 35) {
       let found = false;
@@ -892,9 +1125,11 @@ app.post('/api/analytics/domains', async (req, res) => {
   }
 
   try {
-    for (const f of filePaths) {
+    for (const f of uncachedList) {
       if (aborted) break;
 
+      const fileDomainMap = new Map();
+      let fileLines = 0;
       const fileStream = fs.createReadStream(f.path);
       const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
@@ -906,12 +1141,13 @@ app.post('/api/analytics/domains', async (req, res) => {
         }
 
         totalLines++;
+        fileLines++;
         if (line) {
           const host = extractDomain(line);
           if (host) {
-            const key = groupMode === 'root' ? getRootDomain(host) : host;
+            const key = (groupMode === 'root') ? getRootDomain(host) : host;
             if (key) {
-              recordDomain(key);
+              recordDomain(key, fileDomainMap);
             }
           }
         }
@@ -920,8 +1156,8 @@ app.post('/api/analytics/domains', async (req, res) => {
         if (now - lastProgressTime > 400) {
           lastProgressTime = now;
           if (!res.writableEnded) {
-            const currentBytes = processedBytes + (fileStream.bytesRead || 0);
-            const percent = totalBytes > 0 ? Math.min(99, Math.round((currentBytes / totalBytes) * 100)) : 0;
+            const currentBytes = processedScanBytes + (fileStream.bytesRead || 0);
+            const percent = totalBytesToScan > 0 ? Math.min(99, Math.round((currentBytes / totalBytesToScan) * 100)) : 0;
             const elapsedSec = (now - startTime) / 1000;
             const linesPerSec = elapsedSec > 0 ? Math.round(totalLines / elapsedSec) : 0;
             const liveTop = topList.slice().sort((a, b) => b.count - a.count).slice(0, 35);
@@ -940,7 +1176,12 @@ app.post('/api/analytics/domains', async (req, res) => {
         }
       }
 
-      processedBytes += f.size;
+      processedScanBytes += f.size;
+
+      if (!aborted) {
+        // Save scan data into persistent cache for this file!
+        await saveFileAnalyticsCache(f.path, f.stat, fileLines, fileDomainMap);
+      }
     }
 
     if (analyticsId) activeAnalytics.delete(analyticsId);
@@ -953,7 +1194,7 @@ app.post('/api/analytics/domains', async (req, res) => {
       return;
     }
 
-    // Sort domains from largest to smallest count
+    // Sort domains descending
     const sortedDomains = Array.from(domainMap.entries())
       .map(([domain, count]) => ({ domain, count }))
       .sort((a, b) => b.count - a.count);
@@ -968,6 +1209,9 @@ app.post('/api/analytics/domains', async (req, res) => {
         uniqueDomains: sortedDomains.length,
         linesPerSec,
         elapsed: elapsedSec.toFixed(2) + 's',
+        fromCache: cachedList.length > 0,
+        cachedFiles: cachedList.map(c => c.name),
+        scannedFiles: uncachedList.map(u => u.name),
         domains: sortedDomains
       }) + '\n');
       res.end();
@@ -979,6 +1223,69 @@ app.post('/api/analytics/domains', async (req, res) => {
       res.end();
     }
   }
+});
+
+// ─── API: Analytics Cache Status ────────────────────────────
+
+app.post('/api/analytics/cache-status', (req, res) => {
+  const { files = [] } = req.body;
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.json({ totalFiles: 0, cachedCount: 0, allCached: false, files: [] });
+  }
+
+  const results = [];
+  let cachedCount = 0;
+
+  for (const f of files) {
+    const p = resolveLogPath(f);
+    if (!p || !fs.existsSync(p)) {
+      results.push({ name: f, cached: false, error: 'File not found' });
+      continue;
+    }
+    const stat = fs.statSync(p);
+    const cached = getCachedFileAnalytics(p, stat);
+    if (cached) {
+      cachedCount++;
+      results.push({
+        name: f,
+        cached: true,
+        totalLines: cached.totalLines,
+        uniqueDomains: cached.uniqueDomains || (cached.sortedDomains ? cached.sortedDomains.length : 0),
+        scannedAt: cached.scannedAt
+      });
+    } else {
+      results.push({ name: f, cached: false });
+    }
+  }
+
+  res.json({
+    totalFiles: files.length,
+    cachedCount,
+    allCached: cachedCount === files.length && files.length > 0,
+    files: results
+  });
+});
+
+// ─── API: Clear Analytics Cache ─────────────────────────────
+
+app.post('/api/analytics/clear-cache', (req, res) => {
+  const { files = [] } = req.body;
+  let clearedCount = 0;
+
+  if (Array.isArray(files) && files.length > 0) {
+    for (const f of files) {
+      const p = resolveLogPath(f);
+      if (p) {
+        clearAnalyticsCache(p);
+        clearedCount++;
+      }
+    }
+  } else {
+    clearAnalyticsCache(null);
+    clearedCount = -1;
+  }
+
+  res.json({ success: true, message: 'Analytics cache cleared', clearedCount });
 });
 
 app.post('/api/analytics/abort', (req, res) => {
