@@ -72,14 +72,35 @@ function estimateLineCount(sizeBytes, avgLineLen = 67) {
 }
 
 /**
+ * Strip promotional watermarks, telegram tags, tabs, and trailing metadata from passwords
+ */
+function cleanPassword(pass) {
+  if (!pass) return '';
+  // 1. If there is a tab, everything from the first tab is watermark/metadata
+  if (pass.includes('\t')) {
+    pass = pass.split('\t')[0];
+  }
+  // 2. Pipe separator with surrounding spaces: ' | ', ' |', '| '
+  pass = pass.replace(/\s*\|\s*.*$/, '');
+  // 3. Arrow separators: ' ➔ ', ' -> ', ' => '
+  pass = pass.replace(/\s*[➔➜➞➝]\s*.*$/, '');
+  pass = pass.replace(/\s+(?:->|=>)\s+.*$/, '');
+  // 4. Control characters (like \u001f, \x00-\x1f)
+  pass = pass.replace(/[\x00-\x1f\x7f-\x9f].*$/, '');
+  // 5. Multiple spaces followed by promo text (@, t.me, http, lifetime, cloud, telegram, brackets)
+  pass = pass.replace(/\s{2,}(?:[@#|~]|t\.me\/|https?:\/\/|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$/i, '');
+  return pass.trim();
+}
+
+/**
  * Strip promotional watermarks, telegram tags, and trailing metadata
  */
 function stripAdSuffix(line) {
   if (!line) return '';
   return line
-    .replace(/[\t\s]+[➔➜➞➝]\s*.*$/, '')
+    .replace(/\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d).*$/i, '')
+    .replace(/\s*[➔➜➞➝]\s*.*$/, '')
     .replace(/[\t\s]+(?:->|=>)\s+.*$/, '')
-    .replace(/[\t\s]+\|\s*[@t].*$/i, '')
     .replace(/[\t\s]+t\.me\/[a-zA-Z0-9_\-\.\/]+.*$/i, '')
     .replace(/[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$/i, '')
     .replace(/[\t\s]+\((?:@|t\.me)[^\)]*\).*$/i, '')
@@ -148,7 +169,7 @@ function parseLogLine(rawLine) {
     return {
       url: urlPart,
       user: email,
-      pass: passPart,
+      pass: cleanPassword(passPart),
       identityType: 'email'
     };
   }
@@ -167,7 +188,7 @@ function parseLogLine(rawLine) {
       return {
         url,
         user: u,
-        pass: p,
+        pass: cleanPassword(p),
         identityType: classifyIdentity(u)
       };
     } else {
@@ -192,7 +213,7 @@ function parseLogLine(rawLine) {
       return {
         url,
         user: u,
-        pass: p,
+        pass: cleanPassword(p),
         identityType: classifyIdentity(u)
       };
     } else {
@@ -210,17 +231,17 @@ function parseLogLine(rawLine) {
     if (line.includes('|')) {
       const parts = line.split('|').map(p => p.trim());
       if (parts.length >= 3) {
-        return { url: parts[0], user: parts[1], pass: parts.slice(2).join('|'), identityType: classifyIdentity(parts[1]) };
+        return { url: parts[0], user: parts[1], pass: cleanPassword(parts.slice(2).join('|')), identityType: classifyIdentity(parts[1]) };
       } else if (parts.length === 2) {
-        return { url: '', user: parts[0], pass: parts[1], identityType: classifyIdentity(parts[0]) };
+        return { url: '', user: parts[0], pass: cleanPassword(parts[1]), identityType: classifyIdentity(parts[0]) };
       }
     }
     if (line.includes(';')) {
       const parts = line.split(';').map(p => p.trim());
       if (parts.length >= 3) {
-        return { url: parts[0], user: parts[1], pass: parts.slice(2).join(';'), identityType: classifyIdentity(parts[1]) };
+        return { url: parts[0], user: parts[1], pass: cleanPassword(parts.slice(2).join(';')), identityType: classifyIdentity(parts[1]) };
       } else if (parts.length === 2) {
-        return { url: '', user: parts[0], pass: parts[1], identityType: classifyIdentity(parts[0]) };
+        return { url: '', user: parts[0], pass: cleanPassword(parts[1]), identityType: classifyIdentity(parts[0]) };
       }
     }
   }
@@ -238,7 +259,7 @@ function parseLogLine(rawLine) {
     return {
       url: '',
       user: u,
-      pass: p,
+      pass: cleanPassword(p),
       identityType: classifyIdentity(u)
     };
   } else {
@@ -249,7 +270,7 @@ function parseLogLine(rawLine) {
     return {
       url,
       user: u,
-      pass: p,
+      pass: cleanPassword(p),
       identityType: classifyIdentity(u)
     };
   }

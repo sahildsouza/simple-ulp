@@ -114,6 +114,27 @@ const ResultsRenderer = (() => {
   }
 
   /**
+   * Strip promotional watermarks, telegram ads, tabs, and metadata from password
+   */
+  function cleanPassword(pass) {
+    if (!pass) return '';
+    // 1. If there is a tab, everything from the first tab is watermark/metadata
+    if (pass.includes('\t')) {
+      pass = pass.split('\t')[0];
+    }
+    // 2. Pipe separator with surrounding spaces: ' | ', ' |', '| '
+    pass = pass.replace(/\s*\|\s*.*$/, '');
+    // 3. Arrow separators: ' ➔ ', ' -> ', ' => '
+    pass = pass.replace(/\s*[➔➜➞➝]\s*.*$/, '');
+    pass = pass.replace(/\s+(?:->|=>)\s+.*$/, '');
+    // 4. Control characters (like \u001f, \x00-\x1f)
+    pass = pass.replace(/[\x00-\x1f\x7f-\x9f].*$/, '');
+    // 5. Multiple spaces followed by promo text (@, t.me, http, lifetime, cloud, telegram, brackets)
+    pass = pass.replace(/\s{2,}(?:[@#|~]|t\.me\/|https?:\/\/|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$/i, '');
+    return pass.trim();
+  }
+
+  /**
    * Set the results data and render
    */
   function setResults(data, isMultiFile) {
@@ -123,6 +144,7 @@ const ResultsRenderer = (() => {
     // Recalculate counts
     counts = { raw: allResults.length, email: 0, username: 0, phone: 0 };
     for (const r of allResults) {
+      if (r.pass) r.pass = cleanPassword(r.pass);
       if (r.identityType === 'email') counts.email++;
       else if (r.identityType === 'username') counts.username++;
       else if (r.identityType === 'phone') counts.phone++;
@@ -135,6 +157,7 @@ const ResultsRenderer = (() => {
    * Append results incrementally during streaming
    */
   function appendResult(result) {
+    if (result.pass) result.pass = cleanPassword(result.pass);
     allResults.push(result);
     counts.raw++;
     if (result.identityType === 'email') counts.email++;
