@@ -516,7 +516,7 @@ const AnalyticsApp = (() => {
       if (sElapsed) sElapsed.textContent = data.elapsed || '0s';
 
       if (statusIdle) statusIdle.style.display = 'none';
-      if (summaryBar) summaryBar.style.display = 'inline-flex';
+      if (summaryBar) summaryBar.style.display = 'grid';
 
       resetRunUI();
 
