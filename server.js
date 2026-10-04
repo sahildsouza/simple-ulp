@@ -1037,7 +1037,7 @@ app.post('/api/count', (req, res) => {
 // ─── Start ────────────────────────────────────────────────
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  ULP Log Explorer`);
+  console.log(`\n  ULP Scan`);
   console.log(`  ─────────────────────────────`);
   console.log(`  Server:    http://localhost:${PORT}`);
   console.log(`  Logs dir:  ${LOGS_DIR}`);

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ULP Log Explorer</title>
+  <title>ULP Scan</title>
   <meta name="description" content="Fast log file search and exploration tool powered by ripgrep">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=13">
+  <link rel="stylesheet" href="/css/style.css?v=14">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -24,7 +24,7 @@
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M14 2v6h6M8 13h8M8 17h8M8 9h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Simple ULP
+        ULP Scan
       </h1>
     </div>
     <nav class="header-nav" id="headerNav">
@@ -226,7 +226,9 @@
           <div class="analytics-bar-left">
             <div class="analytics-files-dropdown-wrap" id="analyticsFilesDropdownWrap">
               <button class="analytics-files-trigger" id="analyticsFilesBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Click to view selected files">
-                <span class="analytics-file-icon">📁</span>
+                <svg class="analytics-file-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
                 <span id="analyticsFileCountText">No files selected</span>
                 <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
                   <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -248,7 +250,11 @@
                 <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
               <input type="text" id="analyticsFilterInput" class="analytics-filter-input" placeholder="Filter domains…" autocomplete="off" spellcheck="false">
-              <button class="btn-clear-filter" id="btnClearAnalyticsFilter" style="display: none;">✕</button>
+              <button class="btn-clear-filter" id="btnClearAnalyticsFilter" style="display: none;" title="Clear filter" aria-label="Clear filter">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+              </button>
             </div>
             <button class="btn btn-primary btn-run-analytics" id="btnRunAnalytics">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" id="analyticsRunIcon">
@@ -282,33 +288,30 @@
           </div>
           <div class="analytics-live-footer">
             <span id="analyticsLiveSub">Reading selected files…</span>
-            <span class="live-pill">🟢 Live Streaming</span>
+            <span class="live-pill"><span class="analytics-pulse-dot"></span>Live Streaming</span>
           </div>
         </div>
 
-        <!-- Analytics Metrics / Status Bar -->
+        <!-- Analytics Metrics Bar (Domains, Lines, Time) -->
         <div class="analytics-metrics-bar" id="analyticsStatusBar">
           <div class="analytics-status-idle" id="analyticsStatusIdle">
-            <span class="analytics-status-text" id="analyticsStatusText">Ready — select files and click Run Analytics</span>
+            <span class="status-pulse-dot"></span>
+            <span class="analytics-status-text" id="analyticsStatusText">Ready — select log files and run analytics</span>
           </div>
-          <div class="analytics-stats-chips" id="analyticsSummary" style="display: none;">
-            <div class="stat-chip stat-chip-domains" title="Unique domains extracted">
-              <span class="stat-chip-icon">🏷️</span>
-              <span class="stat-chip-val" id="summaryTotalDomains">0</span>
-              <span class="stat-chip-label">domains</span>
+          <div class="analytics-metrics-strip" id="analyticsSummary" style="display: none;">
+            <div class="metric-cell">
+              <span class="metric-val" id="summaryTotalDomains">0</span>
+              <span class="metric-lbl">Domains</span>
             </div>
-            <div class="stat-chip stat-chip-lines" title="Total log lines processed">
-              <span class="stat-chip-icon">📄</span>
-              <span class="stat-chip-val" id="summaryTotalLines">0</span>
-              <span class="stat-chip-label">lines</span>
+            <div class="metric-sep"></div>
+            <div class="metric-cell">
+              <span class="metric-val" id="summaryTotalLines">0</span>
+              <span class="metric-lbl">Lines</span>
             </div>
-            <div class="stat-chip stat-chip-speed" title="Processing speed">
-              <span class="stat-chip-icon">⚡</span>
-              <span class="stat-chip-val" id="summarySpeed">0 lines/s</span>
-            </div>
-            <div class="stat-chip stat-chip-time" title="Total scan duration">
-              <span class="stat-chip-icon">⏱️</span>
-              <span class="stat-chip-val" id="summaryElapsed">0s</span>
+            <div class="metric-sep"></div>
+            <div class="metric-cell">
+              <span class="metric-val" id="summaryElapsed">0s</span>
+              <span class="metric-lbl">Time</span>
             </div>
           </div>
         </div>
@@ -317,8 +320,14 @@
         <div class="analytics-scroll" id="analyticsScroll">
           <div class="analytics-table-header">
             <div class="col-rank">#</div>
-            <div class="col-domain">Domain</div>
-            <div class="col-count">Count</div>
+            <div class="col-domain col-sortable" id="headerSortDomain" role="button" tabindex="0" title="Sort by Domain">
+              <span>Domain</span>
+              <span class="sort-icon" id="sortIconDomain"></span>
+            </div>
+            <div class="col-count col-sortable sorted" id="headerSortCount" role="button" tabindex="0" title="Sort by Count">
+              <span>Count</span>
+              <span class="sort-icon" id="sortIconCount"></span>
+            </div>
             <div class="col-actions" title="Search in Log Explorer">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
@@ -328,7 +337,11 @@
           </div>
           <!-- Message inside table when empty or loading -->
           <div class="analytics-table-message" id="analyticsTableMessage">
-            <div class="analytics-msg-icon" id="analyticsMsgIcon">📁</div>
+            <div class="analytics-msg-icon" id="analyticsMsgIcon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
             <div class="analytics-msg-title" id="analyticsMsgTitle">Select Log Files to Analyze</div>
             <div class="analytics-msg-desc" id="analyticsMsgDesc">Select one or more log files from the left sidebar to list all domains sorted by frequency.</div>
             <button class="btn btn-secondary btn-sm" id="btnSelectFilesInside" style="display:none; margin-top:12px;">Choose Files</button>
@@ -347,11 +360,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=13"></script>
-  <script src="/js/search.js?v=13"></script>
-  <script src="/js/results.js?v=13"></script>
-  <script src="/js/analytics.js?v=13"></script>
-  <script src="/js/files.js?v=13"></script>
-  <script src="/js/app.js?v=13"></script>
+  <script src="/js/memory.js?v=14"></script>
+  <script src="/js/search.js?v=14"></script>
+  <script src="/js/results.js?v=14"></script>
+  <script src="/js/analytics.js?v=14"></script>
+  <script src="/js/files.js?v=14"></script>
+  <script src="/js/app.js?v=14"></script>
 </body>
 </html>

@@ -1374,17 +1374,29 @@ a {
       padding: 5px var(--sp-3);
     }
 
-    .analytics-stats-chips {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
+    .analytics-metrics-strip {
       width: 100%;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 10px;
     }
 
-    .stat-chip {
-      padding: 4px 8px;
-      font-size: 11px;
-      justify-content: center;
+    .metric-cell {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+    }
+
+    .metric-val {
+      font-size: 12px;
+    }
+
+    .metric-lbl {
+      font-size: 9px;
+    }
+
+    .metric-sep {
+      height: 20px;
     }
 
     .analytics-table-header {
@@ -1790,61 +1802,46 @@ a {
     font-weight: 500;
   }
 
-  .analytics-stats-chips {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    width: 100%;
-  }
-
-  .stat-chip {
+  .analytics-metrics-strip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 16px;
     background: var(--surface-2);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    font-size: 12px;
+    border-radius: var(--radius-md);
+    padding: 5px 14px;
+  }
+
+  .metric-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .metric-val {
     font-family: var(--font-mono);
-    color: var(--text-secondary);
-    white-space: nowrap;
-    transition: background var(--duration-fast);
-  }
-
-  .stat-chip:hover {
-    background: var(--surface-3);
-  }
-
-  .stat-chip-icon {
-    font-size: 12px;
-  }
-
-  .stat-chip-val {
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: -0.01em;
   }
 
-  .stat-chip-label {
-    font-size: 11px;
-    color: var(--text-tertiary);
-  }
-
-  .stat-chip-domains .stat-chip-val {
+  #summaryTotalDomains {
     color: var(--accent);
   }
 
-  .stat-chip-lines .stat-chip-val {
-    color: var(--text-primary);
+  .metric-lbl {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
   }
 
-  .stat-chip-speed .stat-chip-val {
-    color: #10b981;
-  }
-
-  .stat-chip-time .stat-chip-val {
-    color: #a855f7;
+  .metric-sep {
+    width: 1px;
+    height: 14px;
+    background: var(--border-color);
   }
 
   /* ─── Analytics Table Message ──────────────────── */
@@ -2052,6 +2049,71 @@ a {
   .btn-icon-xs:hover {
     color: var(--text-primary);
     background: var(--surface-3);
+  }
+
+  /* ─── Sortable Table Headers ──────────────────── */
+
+  .col-sortable {
+    cursor: pointer;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color var(--duration-fast);
+  }
+
+  .col-sortable:hover {
+    color: var(--text-primary);
+  }
+
+  .col-sortable.sorted {
+    color: var(--accent);
+  }
+
+  .sort-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.35;
+    transition: all var(--duration-fast);
+  }
+
+  .col-sortable:hover .sort-icon {
+    opacity: 0.8;
+  }
+
+  .col-sortable.sorted .sort-icon {
+    opacity: 1;
+    color: var(--accent);
+  }
+
+  .col-count.col-sortable {
+    justify-content: flex-end;
+  }
+
+  /* ─── Icon Wrappers & SVG Alignment ───────────── */
+
+  .cred-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .cred-icon-svg {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .analytics-file-icon {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .analytics-file-item-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
   }
 
   /* ─── Focus Visible ───────────────────────────── */

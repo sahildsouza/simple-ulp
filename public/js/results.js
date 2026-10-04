@@ -595,8 +595,15 @@ const ResultsRenderer = (() => {
         uBtn.className = 'btn-raw-copy';
         const isUCopied = typeof CopiedMemory !== 'undefined' && CopiedMemory.has(result.user);
         if (isUCopied) uBtn.classList.add('is-copied');
-        const icon = result.identityType === 'email' ? '✉' : (result.identityType === 'phone' ? '📱' : '👤');
-        uBtn.innerHTML = `<span>${icon}</span> <span>${isUCopied ? '✓' : 'User'}</span>`;
+        let iconSvg = '';
+        if (result.identityType === 'email') {
+          iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"/></svg>';
+        } else if (result.identityType === 'phone') {
+          iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+        } else {
+          iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>';
+        }
+        uBtn.innerHTML = `<span class="cred-icon-wrap">${iconSvg}</span> <span>${isUCopied ? '✓' : 'User'}</span>`;
         uBtn.title = `Copy ${result.identityType || 'user'} only: ${result.user}`;
         uBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -614,7 +621,8 @@ const ResultsRenderer = (() => {
         pBtn.className = 'btn-raw-copy';
         const isPCopied = typeof CopiedMemory !== 'undefined' && CopiedMemory.has(result.pass);
         if (isPCopied) pBtn.classList.add('is-copied');
-        pBtn.innerHTML = `<span>🔑</span> <span>${isPCopied ? '✓' : 'Pass'}</span>`;
+        const passSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
+        pBtn.innerHTML = `<span class="cred-icon-wrap">${passSvg}</span> <span>${isPCopied ? '✓' : 'Pass'}</span>`;
         pBtn.title = 'Copy password only';
         pBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -677,17 +685,19 @@ const ResultsRenderer = (() => {
     const isUserCopied = typeof CopiedMemory !== 'undefined' && CopiedMemory.has(result.user);
     if (isUserCopied) identityPill.classList.add('is-copied');
 
-    let iconText = '👤';
+    let iconSvg = '';
     let typeName = 'username';
     if (result.identityType === 'email') {
-      iconText = '✉';
+      iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"/></svg>';
       typeName = 'email';
     } else if (result.identityType === 'phone') {
-      iconText = '📱';
+      iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
       typeName = 'phone';
+    } else {
+      iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>';
     }
 
-    identityPill.innerHTML = `<span>${iconText}</span> <span class="cred-text">${escapeHtml(result.user || '—')}</span>`;
+    identityPill.innerHTML = `<span class="cred-icon-wrap">${iconSvg}</span> <span class="cred-text">${escapeHtml(result.user || '—')}</span>`;
     identityPill.title = `Click to copy ${typeName}: ${result.user || '—'}`;
 
     // Click on identity -> copies identity only
@@ -711,7 +721,8 @@ const ResultsRenderer = (() => {
     const isPassCopied = typeof CopiedMemory !== 'undefined' && CopiedMemory.has(result.pass);
     if (isPassCopied) passPill.classList.add('is-copied');
 
-    passPill.innerHTML = `<span>🔑</span> <span class="cred-text">${escapeHtml(result.pass || '—')}</span>`;
+    const passIconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
+    passPill.innerHTML = `<span class="cred-icon-wrap">${passIconSvg}</span> <span class="cred-text">${escapeHtml(result.pass || '—')}</span>`;
     passPill.title = `Click to copy password: ${result.pass || '—'}`;
 
     // Click on pass -> copies password only

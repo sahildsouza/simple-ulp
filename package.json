@@ -1,7 +1,7 @@
 {
-  "name": "ulp-log-explorer",
+  "name": "ulp-scan",
   "version": "1.0.0",
-  "description": "Fast log file explorer powered by ripgrep",
+  "description": "ULP Scan - Fast log file explorer and analytics",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

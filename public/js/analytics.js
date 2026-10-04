@@ -17,6 +17,9 @@ const AnalyticsApp = (() => {
   let topDomainCount = 1;
   let lastAnalyzedFiles = [];
 
+  let sortColumn = 'count'; // 'count' | 'domain'
+  let sortDirection = 'desc'; // 'desc' | 'asc'
+
   let currentView = 'explorer'; // 'explorer' | 'analytics'
   let scrollContainer = null;
   let viewport = null;
@@ -119,6 +122,32 @@ const AnalyticsApp = (() => {
       });
     }
 
+    // Sortable table headers
+    const headerSortDomain = document.getElementById('headerSortDomain');
+    const headerSortCount = document.getElementById('headerSortCount');
+
+    if (headerSortDomain) {
+      headerSortDomain.addEventListener('click', () => handleSort('domain'));
+      headerSortDomain.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleSort('domain');
+        }
+      });
+    }
+
+    if (headerSortCount) {
+      headerSortCount.addEventListener('click', () => handleSort('count'));
+      headerSortCount.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleSort('count');
+        }
+      });
+    }
+
+    updateSortHeaderUI();
+
     // Scroll listener for virtual scroller
     if (scrollContainer) {
       scrollContainer.addEventListener('scroll', onScroll, { passive: true });
@@ -169,7 +198,7 @@ const AnalyticsApp = (() => {
 
       const files = getSelectedFiles();
       if (files.length === 0) {
-        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.', false, true);
+        showTableMessage('folder', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.', false, true);
       } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
         // Already have analyzed results for this exact file selection
         hideTableMessage();
@@ -177,7 +206,7 @@ const AnalyticsApp = (() => {
       } else {
         // Files are selected, but DO NOT auto-scan: offer the option to run with live progress bar
         const filesDesc = files.length === 1 ? files[0] : `${files.length} log files`;
-        showTableMessage('📊', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
+        showTableMessage('analytics', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
       }
     } else {
       if (navAnalytics) navAnalytics.classList.remove('active');
@@ -223,11 +252,11 @@ const AnalyticsApp = (() => {
         visibleNodes.forEach(node => node.remove());
         visibleNodes.clear();
         if (viewport) viewport.style.height = '0px';
-        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.', false, true);
+        showTableMessage('folder', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.', false, true);
       } else if (!filesEqual(selected, lastAnalyzedFiles)) {
         // Files changed: prompt user to run analytics (DO NOT auto-scan)
         const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
-        showTableMessage('📊', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true, false);
+        showTableMessage('analytics', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true, false);
       }
     }
   }
@@ -253,14 +282,36 @@ const AnalyticsApp = (() => {
       const item = document.createElement('div');
       item.className = 'analytics-file-item';
       item.innerHTML = `
-        <span class="analytics-file-item-icon">📄</span>
+        <svg class="analytics-file-item-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="analytics-file-item-name" title="${fileName}">${fileName}</span>
       `;
       listEl.appendChild(item);
     });
   }
 
-  function showTableMessage(icon, title, desc, showRunBtn = false, showFilesBtn = false) {
+  function getMsgIconSvg(type) {
+    switch (type) {
+      case 'folder':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      case 'analytics':
+      case 'chart':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+      case 'warning':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      case 'error':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+      case 'search':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+      case 'stop':
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="9" width="6" height="6" fill="currentColor"/></svg>';
+      case 'loading':
+        return '<div class="loading-spinner"></div>';
+      default:
+        return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/></svg>';
+    }
+  }
+
+  function showTableMessage(iconType, title, desc, showRunBtn = false, showFilesBtn = false) {
     const msgEl = document.getElementById('analyticsTableMessage');
     const iconEl = document.getElementById('analyticsMsgIcon');
     const titleEl = document.getElementById('analyticsMsgTitle');
@@ -269,7 +320,7 @@ const AnalyticsApp = (() => {
     const btnSelectFiles = document.getElementById('btnSelectFilesInside');
 
     if (!msgEl) return;
-    if (iconEl) iconEl.textContent = icon;
+    if (iconEl) iconEl.innerHTML = getMsgIconSvg(iconType);
     if (titleEl) titleEl.textContent = title;
     if (descEl) descEl.textContent = desc;
     if (btnInside) {
@@ -296,7 +347,7 @@ const AnalyticsApp = (() => {
 
     const files = getSelectedFiles();
     if (!files || files.length === 0) {
-      showTableMessage('⚠️', 'No Files Selected', 'Please select at least one file from the left sidebar.');
+      showTableMessage('warning', 'No Files Selected', 'Please select at least one file from the left sidebar.');
       if (typeof showToast === 'function') {
         showToast('Please select at least one file from the sidebar', 'warning');
       }
@@ -350,7 +401,7 @@ const AnalyticsApp = (() => {
     if (liveDomains) liveDomains.textContent = '0 unique domains';
     if (liveSub) liveSub.textContent = 'Reading files…';
 
-    showTableMessage('⏳', 'Scanning in Progress…', `Reading ${files.length} selected log file(s) with live domain streaming…`);
+    showTableMessage('loading', 'Scanning in Progress…', `Reading ${files.length} selected log file(s) with live domain streaming…`);
 
     try {
       const res = await fetch('/api/analytics/domains', {
@@ -401,7 +452,7 @@ const AnalyticsApp = (() => {
       }
       const liveBanner = document.getElementById('analyticsLiveBanner');
       if (liveBanner) liveBanner.style.display = 'none';
-      showTableMessage('❌', 'Analysis Failed', err.message, true);
+      showTableMessage('error', 'Analysis Failed', err.message, true);
       resetRunUI();
     }
   }
@@ -423,9 +474,9 @@ const AnalyticsApp = (() => {
       const pct = Math.min(99, Math.max(1, data.percent || 1));
       if (liveBar) liveBar.style.width = pct + '%';
       if (liveTitle) liveTitle.textContent = `Scanning ${data.currentFile || 'logs'} (${pct}%)`;
-      if (liveSpeed) liveSpeed.textContent = `⚡ ${(data.linesPerSec || 0).toLocaleString()} lines/s`;
-      if (liveElapsed) liveElapsed.textContent = `⏱️ ${data.elapsed || '0s'}`;
-      if (liveDomains) liveDomains.textContent = `🎯 ${(data.uniqueDomains || 0).toLocaleString()} domains`;
+      if (liveSpeed) liveSpeed.textContent = `${(data.linesPerSec || 0).toLocaleString()} lines/s`;
+      if (liveElapsed) liveElapsed.textContent = `${data.elapsed || '0s'}`;
+      if (liveDomains) liveDomains.textContent = `${(data.uniqueDomains || 0).toLocaleString()} domains`;
       if (liveSub) liveSub.textContent = `${(data.totalLines || 0).toLocaleString()} lines processed`;
 
       if (statusBarText) {
@@ -440,7 +491,8 @@ const AnalyticsApp = (() => {
         // If not actively typing a filter, stream live top domains
         if (!filterVal) {
           hideTableMessage();
-          filteredDomains = data.topDomains;
+          filteredDomains = [...data.topDomains];
+          applySort(filteredDomains);
           topDomainCount = data.topDomains[0]?.count || 1;
           if (viewport) viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
           renderVisible();
@@ -453,27 +505,23 @@ const AnalyticsApp = (() => {
       allDomains = data.domains || [];
       topDomainCount = allDomains.length > 0 ? (allDomains[0].count || 1) : 1;
 
-      // Update metrics chips
+      // Update clean 3-metric strip (Domains, Lines, Time)
       const sDomains = document.getElementById('summaryTotalDomains');
       const sLines = document.getElementById('summaryTotalLines');
-      const sSpeed = document.getElementById('summarySpeed');
       const sElapsed = document.getElementById('summaryElapsed');
       const statusIdle = document.getElementById('analyticsStatusIdle');
 
-      if (sDomains) sDomains.textContent = data.uniqueDomains.toLocaleString();
-      if (sLines) sLines.textContent = data.totalLines.toLocaleString();
-
-      const speedVal = data.linesPerSec || Math.round(data.totalLines / (parseFloat(data.elapsed) || 1));
-      if (sSpeed) sSpeed.textContent = `${speedVal.toLocaleString()} lines/s`;
-      if (sElapsed) sElapsed.textContent = data.elapsed;
+      if (sDomains) sDomains.textContent = (data.uniqueDomains || 0).toLocaleString();
+      if (sLines) sLines.textContent = (data.totalLines || 0).toLocaleString();
+      if (sElapsed) sElapsed.textContent = data.elapsed || '0s';
 
       if (statusIdle) statusIdle.style.display = 'none';
-      if (summaryBar) summaryBar.style.display = 'flex';
+      if (summaryBar) summaryBar.style.display = 'inline-flex';
 
       resetRunUI();
 
       if (allDomains.length === 0) {
-        showTableMessage('🔍', 'No Domains Found', 'No valid domains or URLs were extracted from the selected log file(s).');
+        showTableMessage('search', 'No Domains Found', 'No valid domains or URLs were extracted from the selected log file(s).');
       } else {
         hideTableMessage();
         applyFilter();
@@ -489,7 +537,7 @@ const AnalyticsApp = (() => {
       if (typeof showToast === 'function') {
         showToast('Analysis cancelled', 'info');
       }
-      showTableMessage('🛑', 'Analysis Cancelled', 'Domain extraction was stopped. Click below to run again.', true);
+      showTableMessage('stop', 'Analysis Cancelled', 'Domain extraction was stopped. Click below to run again.', true);
       resetRunUI();
     } else if (data.type === 'error') {
       const liveBanner = document.getElementById('analyticsLiveBanner');
@@ -498,7 +546,7 @@ const AnalyticsApp = (() => {
       if (typeof showToast === 'function') {
         showToast(`Error: ${data.message}`, 'error');
       }
-      showTableMessage('❌', 'Error During Analysis', data.message, true);
+      showTableMessage('error', 'Error During Analysis', data.message, true);
       resetRunUI();
     }
   }
@@ -540,24 +588,100 @@ const AnalyticsApp = (() => {
   }
 
   /**
-   * Filter allDomains by search input
+   * Sort column click handler
+   */
+  function handleSort(col) {
+    if (sortColumn === col) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = col;
+      sortDirection = col === 'domain' ? 'asc' : 'desc';
+    }
+    updateSortHeaderUI();
+    applyFilter();
+  }
+
+  /**
+   * Update visual indicator arrows on sort headers
+   */
+  function updateSortHeaderUI() {
+    const colDomain = document.getElementById('headerSortDomain');
+    const colCount = document.getElementById('headerSortCount');
+    const iconDomain = document.getElementById('sortIconDomain');
+    const iconCount = document.getElementById('sortIconCount');
+
+    const sortAscSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const sortDescSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const sortBothSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 10l5-5 5 5M7 14l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    if (colDomain && iconDomain) {
+      if (sortColumn === 'domain') {
+        colDomain.classList.add('sorted');
+        iconDomain.innerHTML = sortDirection === 'asc' ? sortAscSvg : sortDescSvg;
+        colDomain.setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+      } else {
+        colDomain.classList.remove('sorted');
+        iconDomain.innerHTML = sortBothSvg;
+        colDomain.removeAttribute('aria-sort');
+      }
+    }
+
+    if (colCount && iconCount) {
+      if (sortColumn === 'count') {
+        colCount.classList.add('sorted');
+        iconCount.innerHTML = sortDirection === 'asc' ? sortAscSvg : sortDescSvg;
+        colCount.setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+      } else {
+        colCount.classList.remove('sorted');
+        iconCount.innerHTML = sortBothSvg;
+        colCount.removeAttribute('aria-sort');
+      }
+    }
+  }
+
+  /**
+   * Sort array according to current sort column and direction
+   */
+  function applySort(list) {
+    if (!Array.isArray(list) || list.length <= 1) return;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    if (sortColumn === 'count') {
+      list.sort((a, b) => {
+        if (a.count !== b.count) {
+          return (a.count - b.count) * dir;
+        }
+        return a.domain.localeCompare(b.domain);
+      });
+    } else if (sortColumn === 'domain') {
+      list.sort((a, b) => {
+        const cmp = a.domain.localeCompare(b.domain, undefined, { sensitivity: 'base' });
+        if (cmp !== 0) return cmp * dir;
+        return b.count - a.count;
+      });
+    }
+  }
+
+  /**
+   * Filter allDomains by search input and apply active sorting
    */
   function applyFilter() {
     const filterInput = document.getElementById('analyticsFilterInput');
     const query = filterInput ? filterInput.value.toLowerCase().trim() : '';
 
     if (!query) {
-      filteredDomains = allDomains;
+      filteredDomains = [...allDomains];
     } else {
       filteredDomains = allDomains.filter(item => item.domain.includes(query));
     }
+
+    applySort(filteredDomains);
 
     // Clear existing nodes
     visibleNodes.forEach(node => node.remove());
     visibleNodes.clear();
 
     if (filteredDomains.length === 0 && allDomains.length > 0) {
-      showTableMessage('🔍', 'No Matching Domains', `No domains matched "${query}". Try a different filter term.`);
+      showTableMessage('search', 'No Matching Domains', `No domains matched "${query}". Try a different filter term.`);
       if (viewport) viewport.style.height = '0px';
       return;
     }
