@@ -161,12 +161,13 @@ const ResultsRenderer = (() => {
     if (!user) return 'unknown';
     user = user.trim();
 
-    // 1. Email check: contains @ with valid domain
-    if (/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(user)) {
+    // 1. Email check: contains @ with valid domain (at least 2-letter TLD)
+    if (/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]{2,}$/.test(user)) {
       return 'email';
     }
     if (user.includes('@') && user.indexOf('@') > 0 && user.indexOf('.', user.indexOf('@')) > user.indexOf('@') + 1) {
-      return 'email';
+      const afterDot = user.substring(user.lastIndexOf('.') + 1);
+      if (afterDot.length >= 2) return 'email';
     }
 
     // 2. Number / Phone check (pure numbers or formatted numbers/IDs/phones)
@@ -201,6 +202,7 @@ const ResultsRenderer = (() => {
 
   /**
    * Parse a standard ULP log line (url:user:password or user:password)
+   * Prioritizes URL structure so passwords containing '@' are never mistaken for usernames.
    */
   function parseLogLine(rawLine) {
     if (!rawLine || typeof rawLine !== 'string') {
@@ -217,36 +219,8 @@ const ResultsRenderer = (() => {
       return { url: '', user: '', pass: '', identityType: 'unknown' };
     }
 
-    // 1. Check for email pattern anywhere in line
-    const emailRegex = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/;
-    const emailMatch = line.match(emailRegex);
-
-    let isEmailCredential = false;
-    if (emailMatch) {
-      const emailIdx = emailMatch.index;
-      const beforeEmail = line.substring(0, emailIdx);
-      if (!beforeEmail.includes('://') || (beforeEmail.includes('://') && beforeEmail.indexOf('/', beforeEmail.indexOf('://') + 3) !== -1)) {
-        isEmailCredential = true;
-      }
-    }
-
-    if (isEmailCredential && emailMatch) {
-      const email = emailMatch[0];
-      const emailIdx = emailMatch.index;
-      const emailEnd = emailIdx + email.length;
-
-      let urlPart = line.substring(0, emailIdx).replace(/[:|;\s]+$/, '');
-      let passPart = line.substring(emailEnd).replace(/^[:|;\s]+/, '');
-
-      return {
-        url: urlPart,
-        user: email,
-        pass: cleanPassword(passPart),
-        identityType: 'email'
-      };
-    }
-
-    // 2. URL with protocol (http://, https://, ftp://, android://) or www.
+    // 1. URL with protocol (http://, https://, ftp://, android://) or www.
+    // When a line starts with a protocol, URL is ALWAYS the first field!
     const protoMatch = line.match(/^(?:([a-zA-Z0-9+.-]+:\/\/)|(www\.))/i);
     if (protoMatch) {
       const proto = protoMatch[0];
@@ -257,6 +231,7 @@ const ResultsRenderer = (() => {
       let rest = '';
 
       if (slashIdx !== -1) {
+        // Find the first colon AFTER the slash: URL ends at that colon
         const colonAfterSlash = afterProto.indexOf(':', slashIdx);
         if (colonAfterSlash !== -1) {
           url = proto + afterProto.substring(0, colonAfterSlash);
@@ -266,6 +241,7 @@ const ResultsRenderer = (() => {
           rest = '';
         }
       } else {
+        // No slash in afterProto: check for port (host:port:user:pass)
         const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
         if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
           url = proto + portColonMatch[1] + ':' + portColonMatch[2];
@@ -283,6 +259,7 @@ const ResultsRenderer = (() => {
       }
 
       if (rest) {
+        // In rest: first colon separates USER from PASS
         const nextColon = rest.indexOf(':');
         if (nextColon !== -1) {
           const u = rest.substring(0, nextColon);
@@ -311,7 +288,7 @@ const ResultsRenderer = (() => {
       }
     }
 
-    // 3. Domain-based URL without protocol
+    // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com:user:pass)
     const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^:]*)?:/);
     if (domainMatch) {
       const url = domainMatch[1] + (domainMatch[2] || '');
@@ -336,7 +313,7 @@ const ResultsRenderer = (() => {
       }
     }
 
-    // 4. Pipe or Semicolon delimited
+    // 3. Pipe or Semicolon delimited if no colons
     if (!line.includes(':')) {
       if (line.includes('|')) {
         const parts = line.split('|').map(p => p.trim());
@@ -356,7 +333,7 @@ const ResultsRenderer = (() => {
       }
     }
 
-    // 5. Standard colon split
+    // 4. Standard colon split (e.g. user:pass or user:pass:with:colons or email:pass)
     const firstColon = line.indexOf(':');
     if (firstColon === -1) {
       return { url: line, user: '', pass: '', identityType: 'unknown' };
@@ -365,7 +342,8 @@ const ResultsRenderer = (() => {
     const firstPart = line.substring(0, firstColon);
     const remaining = line.substring(firstColon + 1);
 
-    if (firstPart.includes('/') || firstPart.includes('.')) {
+    // If firstPart contains path slash / or dot (and not an email in firstPart)
+    if (!firstPart.includes('@') && (firstPart.includes('/') || (firstPart.includes('.') && !/^\d+$/.test(firstPart.replace(/\./g, ''))))) {
       const secondColon = remaining.indexOf(':');
       if (secondColon !== -1) {
         const u = remaining.substring(0, secondColon);
@@ -386,6 +364,7 @@ const ResultsRenderer = (() => {
       }
     }
 
+    // Otherwise: firstPart is user (e.g. user:pass, email:pass, number:pass)
     return {
       url: '',
       user: firstPart,
