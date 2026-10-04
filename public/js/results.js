@@ -485,72 +485,17 @@ const ResultsRenderer = (() => {
       dropdown.className = 'raw-dropdown';
       dropdown.addEventListener('click', (ev) => ev.stopPropagation());
 
-      const header = document.createElement('div');
-      header.className = 'raw-dropdown-header';
-
-      const titleBox = document.createElement('div');
-      titleBox.className = 'raw-dropdown-title';
-      titleBox.innerHTML = `
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-        </svg>
-        <span>Full RAW Line</span>
-        ${result.file ? `<span class="raw-dropdown-file">${escapeHtml(result.file)}</span>` : ''}
-      `;
-
-      const actionsBox = document.createElement('div');
-      actionsBox.className = 'raw-dropdown-actions';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'btn-copy-raw-dropdown';
-      copyBtn.type = 'button';
-      copyBtn.title = 'Copy full raw line';
-      copyBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-          <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
-        </svg>
-        <span>Copy</span>
-      `;
-
-      copyBtn.addEventListener('click', () => {
-        copyToClipboard(result.content, 'line');
-        if (typeof CopiedMemory !== 'undefined') {
-          CopiedMemory.add(result.content);
-          if (result.user) CopiedMemory.add(result.user);
-          if (result.pass) CopiedMemory.add(result.pass);
-        }
-        copyBtn.innerHTML = `<span>✓</span> <span>Copied!</span>`;
-        setTimeout(() => {
-          copyBtn.innerHTML = `
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            <span>Copy</span>
-          `;
-        }, 1500);
-      });
-
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'btn-close-raw-dropdown';
-      closeBtn.type = 'button';
-      closeBtn.title = 'Close';
-      closeBtn.textContent = '✕';
-      closeBtn.addEventListener('click', closeRawDropdown);
-
-      actionsBox.appendChild(copyBtn);
-      actionsBox.appendChild(closeBtn);
-
-      header.appendChild(titleBox);
-      header.appendChild(actionsBox);
+      if (result.file) {
+        const header = document.createElement('div');
+        header.className = 'raw-dropdown-header';
+        header.innerHTML = `<span class="raw-dropdown-file">${escapeHtml(result.file)}</span>`;
+        dropdown.appendChild(header);
+      }
 
       const body = document.createElement('div');
       body.className = 'raw-dropdown-body';
       body.textContent = result.content;
 
-      dropdown.appendChild(header);
       dropdown.appendChild(body);
 
       row.appendChild(dropdown);
