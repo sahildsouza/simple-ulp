@@ -52,6 +52,213 @@ const AnalyticsApp = (() => {
     return { allCached: false, cachedCount: 0, totalFiles: files.length };
   }
 
+  let fastScrollEl = null;
+  let fastTrackEl = null;
+  let fastThumbEl = null;
+  let scrollPopupEl = null;
+  let popupCountValEl = null;
+  let popupDomainPreviewEl = null;
+  let isFastScrollDragging = false;
+  let popupHideTimer = null;
+
+  function formatNumber(n) {
+    if (n == null) return '0';
+    return Number(n).toLocaleString('en-US');
+  }
+
+  /**
+   * Update position and size of the fast scroller thumb
+   */
+  function updateFastScrollThumb() {
+    if (!scrollContainer || !fastScrollEl || !fastTrackEl || !fastThumbEl) return null;
+    if (filteredDomains.length === 0) {
+      fastScrollEl.style.display = 'none';
+      if (scrollPopupEl) scrollPopupEl.style.display = 'none';
+      return null;
+    }
+
+    const scrollHeight = scrollContainer.scrollHeight;
+    const clientHeight = scrollContainer.clientHeight;
+    if (scrollHeight <= clientHeight || clientHeight === 0) {
+      fastScrollEl.style.display = 'none';
+      if (scrollPopupEl) scrollPopupEl.style.display = 'none';
+      return null;
+    }
+
+    fastScrollEl.style.display = 'block';
+
+    const trackHeight = fastTrackEl.clientHeight;
+    // Proportional thumb height clamped between 36px and 120px
+    const thumbHeight = Math.max(36, Math.min(120, (clientHeight / scrollHeight) * trackHeight));
+    fastThumbEl.style.height = thumbHeight + 'px';
+
+    const maxScrollTop = scrollHeight - clientHeight;
+    const scrollRatio = maxScrollTop > 0 ? (scrollContainer.scrollTop / maxScrollTop) : 0;
+    const availableTrack = trackHeight - thumbHeight;
+    const thumbTop = Math.max(0, Math.min(availableTrack, scrollRatio * availableTrack));
+    fastThumbEl.style.top = thumbTop + 'px';
+
+    return { thumbTop, thumbHeight, availableTrack, trackHeight };
+  }
+
+  /**
+   * Display floating count pop-up alongside the scroll thumb
+   */
+  function showScrollPopup(thumbTop, thumbHeight, trackHeight) {
+    if (!scrollPopupEl || filteredDomains.length === 0 || !scrollContainer) return;
+
+    const scrollHeight = scrollContainer.scrollHeight;
+    const clientHeight = scrollContainer.clientHeight;
+    const maxScrollTop = scrollHeight - clientHeight;
+    const scrollRatio = maxScrollTop > 0 ? Math.min(1, Math.max(0, scrollContainer.scrollTop / maxScrollTop)) : 0;
+
+    const itemIndex = Math.min(filteredDomains.length - 1, Math.max(0, Math.round(scrollRatio * (filteredDomains.length - 1))));
+    const item = filteredDomains[itemIndex];
+    if (!item) return;
+
+    if (popupCountValEl) popupCountValEl.textContent = formatNumber(item.count);
+    if (popupDomainPreviewEl) popupDomainPreviewEl.textContent = `#${(itemIndex + 1).toLocaleString()} · ${item.domain}`;
+
+    const tTop = thumbTop != null ? thumbTop : (scrollRatio * ((trackHeight || 300) - 36));
+    const tHeight = thumbHeight || 36;
+    const centerY = tTop + (tHeight / 2) + 32; // +32px offset for table header
+
+    scrollPopupEl.style.display = 'block';
+    const popupH = scrollPopupEl.offsetHeight || 42;
+    const clampedY = Math.max((popupH / 2) + 32, Math.min((trackHeight || 300) + 32 - (popupH / 2), centerY));
+    scrollPopupEl.style.top = clampedY + 'px';
+
+    requestAnimationFrame(() => {
+      scrollPopupEl.style.opacity = '1';
+      scrollPopupEl.style.transform = 'translateY(-50%) scale(1)';
+    });
+
+    if (popupHideTimer) clearTimeout(popupHideTimer);
+    if (!isFastScrollDragging) {
+      popupHideTimer = setTimeout(() => {
+        scrollPopupEl.style.opacity = '0';
+        scrollPopupEl.style.transform = 'translateY(-50%) scale(0.95)';
+        setTimeout(() => {
+          if (scrollPopupEl && scrollPopupEl.style.opacity === '0') {
+            scrollPopupEl.style.display = 'none';
+          }
+        }, 180);
+      }, 750);
+    }
+  }
+
+  /**
+   * Initialize fast scroller controls & dragging
+   */
+  function initFastScroller() {
+    fastScrollEl = document.getElementById('analyticsFastScroll');
+    fastTrackEl = document.getElementById('analyticsFastTrack');
+    fastThumbEl = document.getElementById('analyticsFastThumb');
+    scrollPopupEl = document.getElementById('analyticsScrollPopup');
+    popupCountValEl = document.getElementById('analyticsPopupCountVal');
+    popupDomainPreviewEl = document.getElementById('analyticsPopupDomainPreview');
+
+    if (!fastTrackEl || !fastThumbEl) return;
+
+    // Dragging thumb with pointer events (mouse + touch)
+    fastThumbEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isFastScrollDragging = true;
+      fastThumbEl.setPointerCapture(e.pointerId);
+      fastThumbEl.classList.add('is-dragging');
+      document.body.classList.add('is-scrubbing');
+
+      const thumbInfo = updateFastScrollThumb();
+      if (thumbInfo) {
+        showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+      }
+    });
+
+    fastThumbEl.addEventListener('pointermove', (e) => {
+      if (!isFastScrollDragging || !scrollContainer) return;
+      e.preventDefault();
+
+      const trackRect = fastTrackEl.getBoundingClientRect();
+      const trackHeight = trackRect.height;
+      const thumbHeight = fastThumbEl.offsetHeight;
+      const availableTrack = trackHeight - thumbHeight;
+      if (availableTrack <= 0) return;
+
+      const pointerY = e.clientY - trackRect.top - (thumbHeight / 2);
+      const ratio = Math.max(0, Math.min(1, pointerY / availableTrack));
+
+      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      scrollContainer.scrollTop = ratio * maxScrollTop;
+
+      const thumbTop = ratio * availableTrack;
+      fastThumbEl.style.top = thumbTop + 'px';
+      renderVisible();
+      showScrollPopup(thumbTop, thumbHeight, trackHeight);
+    });
+
+    const stopDrag = (e) => {
+      if (!isFastScrollDragging) return;
+      isFastScrollDragging = false;
+      fastThumbEl.classList.remove('is-dragging');
+      document.body.classList.remove('is-scrubbing');
+      try { fastThumbEl.releasePointerCapture(e.pointerId); } catch (_) {}
+
+      const thumbInfo = updateFastScrollThumb();
+      if (thumbInfo) {
+        showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+      }
+    };
+
+    fastThumbEl.addEventListener('pointerup', stopDrag);
+    fastThumbEl.addEventListener('pointercancel', stopDrag);
+
+    // Track click to jump
+    fastTrackEl.addEventListener('pointerdown', (e) => {
+      if (e.target === fastThumbEl || fastThumbEl.contains(e.target)) return;
+      e.preventDefault();
+      const trackRect = fastTrackEl.getBoundingClientRect();
+      const thumbHeight = fastThumbEl.offsetHeight;
+      const availableTrack = trackRect.height - thumbHeight;
+      if (availableTrack <= 0) return;
+
+      const clickY = e.clientY - trackRect.top - (thumbHeight / 2);
+      const ratio = Math.max(0, Math.min(1, clickY / availableTrack));
+
+      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      scrollContainer.scrollTop = ratio * maxScrollTop;
+      renderVisible();
+
+      const thumbInfo = updateFastScrollThumb();
+      if (thumbInfo) {
+        showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+      }
+    });
+
+    // Forward wheel events on the track to the scroll container
+    fastTrackEl.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      scrollContainer.scrollTop += e.deltaY;
+    }, { passive: false });
+
+    // Keyboard navigation when thumb is focused
+    fastThumbEl.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        scrollContainer.scrollTop += (e.key === 'PageDown' ? scrollContainer.clientHeight : ROW_HEIGHT * 4);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        scrollContainer.scrollTop -= (e.key === 'PageUp' ? scrollContainer.clientHeight : ROW_HEIGHT * 4);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        scrollContainer.scrollTop = 0;
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+    });
+  }
+
   /**
    * Initialize Analytics module
    */
@@ -185,6 +392,8 @@ const AnalyticsApp = (() => {
       window.addEventListener('resize', onScroll, { passive: true });
     }
 
+    initFastScroller();
+
     // Check URL hash for initial view
     if (window.location.hash === '#analytics') {
       switchView('analytics');
@@ -233,7 +442,10 @@ const AnalyticsApp = (() => {
       } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
         // Already have analyzed results for this exact file selection
         hideTableMessage();
-        requestAnimationFrame(renderVisible);
+        requestAnimationFrame(() => {
+          renderVisible();
+          updateFastScrollThumb();
+        });
       } else {
         // Files are selected, but DO NOT auto-scan: offer the option to run with live progress bar
         const filesDesc = files.length === 1 ? files[0] : `${files.length} log files`;
@@ -377,6 +589,9 @@ const AnalyticsApp = (() => {
     if (btnSelectFiles) {
       btnSelectFiles.style.display = showFilesBtn ? 'inline-flex' : 'none';
     }
+
+    if (fastScrollEl) fastScrollEl.style.display = 'none';
+    if (scrollPopupEl) scrollPopupEl.style.display = 'none';
 
     msgEl.style.display = 'flex';
   }
@@ -550,6 +765,7 @@ const AnalyticsApp = (() => {
           topDomainCount = data.topDomains[0]?.count || 1;
           if (viewport) viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
           renderVisible();
+          updateFastScrollThumb();
         }
       }
     } else if (data.type === 'complete') {
@@ -748,6 +964,7 @@ const AnalyticsApp = (() => {
     if (filteredDomains.length === 0 && allDomains.length > 0) {
       showTableMessage('search', 'No Matching Domains', `No domains matched "${query}". Try a different filter term.`);
       if (viewport) viewport.style.height = '0px';
+      updateFastScrollThumb();
       return;
     }
 
@@ -761,6 +978,7 @@ const AnalyticsApp = (() => {
     }
 
     renderVisible();
+    updateFastScrollThumb();
   }
 
   /**
@@ -769,6 +987,10 @@ const AnalyticsApp = (() => {
   function onScroll() {
     if (currentView !== 'analytics') return;
     requestAnimationFrame(renderVisible);
+    const thumbInfo = updateFastScrollThumb();
+    if (thumbInfo) {
+      showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+    }
   }
 
   /**

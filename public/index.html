@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=17">
+  <link rel="stylesheet" href="/css/style.css?v=19">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -350,39 +350,59 @@
           </div>
         </div>
 
-        <!-- Domain Table Container (Always Visible) -->
-        <div class="analytics-scroll" id="analyticsScroll">
-          <div class="analytics-table-header">
-            <div class="col-rank">#</div>
-            <div class="col-domain col-sortable" id="headerSortDomain" role="button" tabindex="0" title="Sort by Domain">
-              <span>Domain</span>
-              <span class="sort-icon" id="sortIconDomain"></span>
+        <!-- Domain Table Container with Fast-Scroller & Count Pop-up -->
+        <div class="analytics-table-wrap" id="analyticsTableWrap">
+          <div class="analytics-scroll" id="analyticsScroll">
+            <div class="analytics-table-header">
+              <div class="col-rank">#</div>
+              <div class="col-domain col-sortable" id="headerSortDomain" role="button" tabindex="0" title="Sort by Domain">
+                <span>Domain</span>
+                <span class="sort-icon" id="sortIconDomain"></span>
+              </div>
+              <div class="col-count col-sortable sorted" id="headerSortCount" role="button" tabindex="0" title="Sort by Count">
+                <span>Count</span>
+                <span class="sort-icon" id="sortIconCount"></span>
+              </div>
+              <div class="col-actions" title="Search in Log Explorer">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                  <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
             </div>
-            <div class="col-count col-sortable sorted" id="headerSortCount" role="button" tabindex="0" title="Sort by Count">
-              <span>Count</span>
-              <span class="sort-icon" id="sortIconCount"></span>
+            <!-- Message inside table when empty or loading -->
+            <div class="analytics-table-message" id="analyticsTableMessage">
+              <div class="analytics-msg-icon" id="analyticsMsgIcon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="analytics-msg-title" id="analyticsMsgTitle">Select Log Files to Analyze</div>
+              <div class="analytics-msg-desc" id="analyticsMsgDesc">Select one or more log files from the left sidebar to list all domains sorted by frequency.</div>
+              <button class="btn btn-secondary btn-sm" id="btnSelectFilesInside" style="display:none; margin-top:12px;">Choose Files</button>
+              <button class="btn btn-primary btn-sm" id="btnTriggerRunInside" style="display:none; margin-top:12px;">Run Analytics Now</button>
             </div>
-            <div class="col-actions" title="Search in Log Explorer">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+            <!-- Virtual Scroll Viewport for Domain Rows -->
+            <div class="analytics-viewport" id="analyticsViewport"></div>
+          </div>
+
+          <!-- Fast-Scroll Scrubber Track & Thumb -->
+          <div class="analytics-fast-scroll" id="analyticsFastScroll" style="display: none;">
+            <div class="analytics-fast-track" id="analyticsFastTrack" title="Drag to fast scroll">
+              <div class="analytics-fast-thumb" id="analyticsFastThumb" role="scrollbar" aria-label="Fast scroll" tabindex="0">
+                <div class="analytics-fast-thumb-grip"></div>
+              </div>
             </div>
           </div>
-          <!-- Message inside table when empty or loading -->
-          <div class="analytics-table-message" id="analyticsTableMessage">
-            <div class="analytics-msg-icon" id="analyticsMsgIcon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+
+          <!-- While-Scrolling Floating Count Pop-up -->
+          <div class="analytics-scroll-popup" id="analyticsScrollPopup" style="display: none; opacity: 0;">
+            <div class="popup-count-badge">
+              <span class="popup-count-num" id="analyticsPopupCountVal">0</span>
+              <span class="popup-count-tag">count</span>
             </div>
-            <div class="analytics-msg-title" id="analyticsMsgTitle">Select Log Files to Analyze</div>
-            <div class="analytics-msg-desc" id="analyticsMsgDesc">Select one or more log files from the left sidebar to list all domains sorted by frequency.</div>
-            <button class="btn btn-secondary btn-sm" id="btnSelectFilesInside" style="display:none; margin-top:12px;">Choose Files</button>
-            <button class="btn btn-primary btn-sm" id="btnTriggerRunInside" style="display:none; margin-top:12px;">Run Analytics Now</button>
+            <div class="popup-domain-preview" id="analyticsPopupDomainPreview"></div>
           </div>
-          <!-- Virtual Scroll Viewport for Domain Rows -->
-          <div class="analytics-viewport" id="analyticsViewport"></div>
         </div>
       </div>
     </main>
@@ -394,11 +414,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=17"></script>
-  <script src="/js/search.js?v=17"></script>
-  <script src="/js/results.js?v=17"></script>
-  <script src="/js/analytics.js?v=17"></script>
-  <script src="/js/files.js?v=17"></script>
-  <script src="/js/app.js?v=17"></script>
+  <script src="/js/memory.js?v=19"></script>
+  <script src="/js/search.js?v=19"></script>
+  <script src="/js/results.js?v=19"></script>
+  <script src="/js/analytics.js?v=19"></script>
+  <script src="/js/files.js?v=19"></script>
+  <script src="/js/app.js?v=19"></script>
 </body>
 </html>
