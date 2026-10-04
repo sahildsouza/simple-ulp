@@ -25,7 +25,15 @@ const RG_BIN = process.platform === 'win32' ? 'rg.exe' : 'rg';
 let activeSearches = new Map();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
 
 // Known non-log files/extensions to ignore
 const IGNORED_FILES = new Set(['server.js', 'package.json', 'package-lock.json', 'README.md', '.gitignore']);

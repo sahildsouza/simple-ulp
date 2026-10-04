@@ -43,6 +43,7 @@ const ResultsRenderer = (() => {
   function init(scrollEl, viewportEl) {
     scrollContainer = scrollEl;
     viewport = viewportEl;
+    removeTabCountBadges();
 
     scrollContainer.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
@@ -194,10 +195,15 @@ const ResultsRenderer = (() => {
   }
 
   /**
-   * Update count numbers in the tab buttons (disabled - counts removed from tabs)
+   * Mode tabs no longer display individual counts.
+   * Strip any stale badge elements from DOM if present (e.g. from cached HTML).
    */
+  function removeTabCountBadges() {
+    document.querySelectorAll('.mode-tab-count, #countRaw, #countEmail, #countUser, #countPhone').forEach(el => el.remove());
+  }
+
   function updateTabCounts() {
-    // Mode tabs no longer display individual counts
+    removeTabCountBadges();
   }
 
   /**

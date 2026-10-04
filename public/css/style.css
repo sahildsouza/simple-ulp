@@ -562,13 +562,14 @@ a {
   }
 
   .result-modes {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 2px;
     background: var(--surface-2);
     padding: 2px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-subtle);
+    flex-wrap: nowrap;
   }
 
   .mode-tab {
@@ -583,6 +584,7 @@ a {
     cursor: pointer;
     transition: all var(--duration-fast);
     user-select: none;
+    white-space: nowrap;
   }
 
   .mode-tab:hover {
@@ -607,18 +609,7 @@ a {
   }
 
   .mode-tab-count {
-    font-size: 10px;
-    font-family: var(--font-mono);
-    background: var(--surface-0);
-    padding: 1px 5px;
-    border-radius: 10px;
-    color: var(--text-tertiary);
-  }
-
-  .mode-tab.active .mode-tab-count {
-    background: var(--accent-subtle);
-    color: var(--accent);
-    font-weight: 600;
+    display: none !important;
   }
 
   /* ─── Results Stats ───────────────────────────── */
@@ -1314,15 +1305,17 @@ a {
     }
 
     .result-modes {
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
       width: 100%;
+      gap: 2px;
     }
 
     .mode-tab {
-      flex: 1;
       justify-content: center;
-      padding: 4px 6px;
+      padding: 6px 4px;
       font-size: 11px;
+      white-space: nowrap;
     }
 
     .cred-row {
