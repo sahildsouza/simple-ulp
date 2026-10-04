@@ -547,6 +547,295 @@ a {
   border-color: var(--border-focus);
 }
 
+/* ─── File Results Breakdown Bar (Above Result Modes) ─── */
+
+.file-breakdown-bar {
+  display: flex;
+  align-items: center;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 6px var(--sp-4);
+  min-height: 38px;
+  position: relative;
+  z-index: 15;
+}
+
+.file-breakdown-dropdown-wrap {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+}
+
+.file-breakdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 5px 12px;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  user-select: none;
+  gap: var(--sp-3);
+  text-align: left;
+}
+
+.file-breakdown-trigger:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.file-breakdown-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+
+.file-breakdown-trigger.is-filtered {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.file-breakdown-trigger-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.file-breakdown-trigger-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.file-breakdown-trigger.is-filtered .file-breakdown-trigger-icon {
+  color: var(--accent);
+}
+
+.file-breakdown-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.file-breakdown-summary {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-breakdown-trigger-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.file-breakdown-count-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-4);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.file-breakdown-trigger.is-filtered .file-breakdown-count-badge {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.file-breakdown-trigger .dropdown-chevron {
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast);
+}
+
+.file-breakdown-trigger[aria-expanded="true"] .dropdown-chevron {
+  transform: rotate(180deg);
+  color: var(--text-primary);
+}
+
+/* ─── File Breakdown Menu Popover ─── */
+
+.file-breakdown-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 100;
+  min-width: 340px;
+  max-width: min(540px, calc(100vw - 32px));
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  animation: dropdownFade 0.15s ease-out;
+}
+
+.file-breakdown-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.file-breakdown-menu-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.file-breakdown-total-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.file-breakdown-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.file-breakdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.file-breakdown-item:hover {
+  background: var(--surface-4);
+}
+
+.file-breakdown-item.is-active {
+  background: var(--surface-4);
+  border-color: var(--accent);
+}
+
+.file-breakdown-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-breakdown-item-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.file-breakdown-item.is-active .file-breakdown-item-icon {
+  color: var(--accent);
+}
+
+.file-breakdown-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-breakdown-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.file-breakdown-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-breakdown-item.is-all .file-breakdown-name {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-breakdown-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-breakdown-bar-track {
+  width: 100%;
+  height: 3px;
+  background: var(--surface-4);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.file-breakdown-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+
+.file-breakdown-pct-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.file-breakdown-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  min-width: 28px;
+  text-align: right;
+}
+
+.file-breakdown-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  flex-shrink: 0;
+}
+
 /* ─── Result Modes Bar ────────────────────────── */
 
 .result-modes-bar {
@@ -1295,6 +1584,22 @@ a {
     .result-content {
       font-size: var(--text-xs);
       padding: 0 var(--sp-2);
+    }
+
+    .file-breakdown-bar {
+      padding: 6px var(--sp-3);
+    }
+
+    .file-breakdown-trigger {
+      max-width: 100%;
+    }
+
+    .file-breakdown-menu {
+      left: 0;
+      right: 0;
+      width: 100%;
+      min-width: 100%;
+      max-width: 100%;
     }
 
     .result-modes-bar {

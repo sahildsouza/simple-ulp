@@ -18,6 +18,8 @@ const ResultsRenderer = (() => {
   let currentViewMode = 'raw'; // 'raw' | 'email' | 'username' | 'phone'
   let activeDropdown = null;
   let activeDropdownIndex = null;
+  let fileMatchCounts = {};
+  let activeFileFilter = null;
 
   // Counts for each mode
   let counts = { raw: 0, email: 0, username: 0, phone: 0 };
@@ -89,16 +91,21 @@ const ResultsRenderer = (() => {
    * Filter allResults into filteredResults based on currentViewMode
    */
   function applyFilter() {
+    let base = allResults;
+    if (activeFileFilter) {
+      base = base.filter(r => r.file === activeFileFilter);
+    }
+
     if (currentViewMode === 'raw') {
-      filteredResults = allResults;
+      filteredResults = base;
     } else if (currentViewMode === 'email') {
-      filteredResults = allResults.filter(r => r.identityType === 'email');
+      filteredResults = base.filter(r => r.identityType === 'email');
     } else if (currentViewMode === 'username') {
-      filteredResults = allResults.filter(r => r.identityType === 'username');
+      filteredResults = base.filter(r => r.identityType === 'username');
     } else if (currentViewMode === 'phone') {
-      filteredResults = allResults.filter(r => r.identityType === 'phone');
+      filteredResults = base.filter(r => r.identityType === 'phone');
     } else {
-      filteredResults = allResults;
+      filteredResults = base;
     }
 
     // Clear existing nodes and any open dropdown
@@ -379,10 +386,14 @@ const ResultsRenderer = (() => {
   function setResults(data, isMultiFile) {
     allResults = data || [];
     multiFileMode = isMultiFile;
+    fileMatchCounts = {};
 
     // Re-parse and recalculate counts
     counts = { raw: allResults.length, email: 0, username: 0, phone: 0 };
     for (const r of allResults) {
+      if (r.file) {
+        fileMatchCounts[r.file] = (fileMatchCounts[r.file] || 0) + 1;
+      }
       if (r.content) {
         const parsed = parseLogLine(r.content);
         r.url = parsed.url;
@@ -404,6 +415,9 @@ const ResultsRenderer = (() => {
    * Append results incrementally during streaming
    */
   function appendResult(result) {
+    if (result.file) {
+      fileMatchCounts[result.file] = (fileMatchCounts[result.file] || 0) + 1;
+    }
     if (result.content) {
       const parsed = parseLogLine(result.content);
       result.url = parsed.url;
@@ -422,11 +436,11 @@ const ResultsRenderer = (() => {
     updateTabCounts();
 
     // Check if result matches current filter
-    let matchesCurrent = false;
-    if (currentViewMode === 'raw') matchesCurrent = true;
-    else if (currentViewMode === 'email' && result.identityType === 'email') matchesCurrent = true;
-    else if (currentViewMode === 'username' && result.identityType === 'username') matchesCurrent = true;
-    else if (currentViewMode === 'phone' && result.identityType === 'phone') matchesCurrent = true;
+    let matchesCurrent = true;
+    if (activeFileFilter && result.file !== activeFileFilter) matchesCurrent = false;
+    else if (currentViewMode === 'email' && result.identityType !== 'email') matchesCurrent = false;
+    else if (currentViewMode === 'username' && result.identityType !== 'username') matchesCurrent = false;
+    else if (currentViewMode === 'phone' && result.identityType !== 'phone') matchesCurrent = false;
 
     if (matchesCurrent) {
       filteredResults.push(result);
@@ -450,6 +464,8 @@ const ResultsRenderer = (() => {
     closeRawDropdown();
     allResults = [];
     filteredResults = [];
+    fileMatchCounts = {};
+    activeFileFilter = null;
     counts = { raw: 0, email: 0, username: 0, phone: 0 };
     visibleNodes.forEach(node => node.remove());
     visibleNodes.clear();
@@ -904,6 +920,12 @@ const ResultsRenderer = (() => {
     getViewMode,
     updateMemoryBadge,
     closeDropdown: closeRawDropdown,
-    isDropdownOpen: () => activeDropdown !== null
+    isDropdownOpen: () => activeDropdown !== null,
+    getFileCounts: () => ({ ...fileMatchCounts }),
+    getActiveFileFilter: () => activeFileFilter,
+    setActiveFileFilter: (fileName) => {
+      activeFileFilter = fileName;
+      applyFilter();
+    }
   };
 })();

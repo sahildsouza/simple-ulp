@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=15">
+  <link rel="stylesheet" href="/css/style.css?v=16">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -131,6 +131,35 @@
               <option value="username">Username only</option>
               <option value="password">Password only</option>
             </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── File Results Breakdown Bar (Above Result Modes) ─── -->
+      <div class="file-breakdown-bar" id="fileBreakdownBar" style="display: none;">
+        <div class="file-breakdown-dropdown-wrap" id="fileBreakdownDropdownWrap">
+          <button class="file-breakdown-trigger" id="fileBreakdownBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Click to view match counts per log file">
+            <div class="file-breakdown-trigger-left">
+              <svg class="file-breakdown-trigger-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="file-breakdown-label">Results by file:</span>
+              <span class="file-breakdown-summary" id="fileBreakdownSummary">0 files</span>
+            </div>
+            <div class="file-breakdown-trigger-right">
+              <span class="file-breakdown-count-badge" id="fileBreakdownCountBadge">0</span>
+              <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </button>
+          <div class="file-breakdown-menu" id="fileBreakdownMenu" style="display: none;">
+            <div class="file-breakdown-menu-header">
+              <span class="file-breakdown-menu-title">Log File Results</span>
+              <span class="file-breakdown-total-badge" id="fileBreakdownTotalBadge">0 matches</span>
+            </div>
+            <div class="file-breakdown-list" id="fileBreakdownList"></div>
           </div>
         </div>
       </div>
@@ -358,11 +387,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=15"></script>
-  <script src="/js/search.js?v=15"></script>
-  <script src="/js/results.js?v=15"></script>
-  <script src="/js/analytics.js?v=15"></script>
-  <script src="/js/files.js?v=15"></script>
-  <script src="/js/app.js?v=15"></script>
+  <script src="/js/memory.js?v=16"></script>
+  <script src="/js/search.js?v=16"></script>
+  <script src="/js/results.js?v=16"></script>
+  <script src="/js/analytics.js?v=16"></script>
+  <script src="/js/files.js?v=16"></script>
+  <script src="/js/app.js?v=16"></script>
 </body>
 </html>
