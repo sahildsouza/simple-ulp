@@ -56,6 +56,9 @@
 
   FileManager.init((files) => {
     selectedFiles = files;
+    if (typeof AnalyticsApp !== 'undefined' && AnalyticsApp.updateFileBadge) {
+      AnalyticsApp.updateFileBadge();
+    }
   });
 
   // ─── Search Mode Toggles ─────────────────────

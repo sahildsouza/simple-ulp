@@ -24,9 +24,24 @@
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M14 2v6h6M8 13h8M8 17h8M8 9h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Log Explorer
+        Simple ULP
       </h1>
     </div>
+    <nav class="header-nav" id="headerNav">
+      <button class="nav-tab active" id="navExplorer" title="Search log files">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+          <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>Log Explorer</span>
+      </button>
+      <button class="nav-tab" id="navAnalytics" title="Domain frequency analytics">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>Log Analytics</span>
+      </button>
+    </nav>
     <div class="header-right">
       <span class="header-badge" id="logsDir" title="Logs directory"></span>
     </div>
@@ -56,8 +71,9 @@
 
     <!-- ─── Main Content ────────────────────── -->
     <main class="main" id="main">
-      <!-- ─── Search Bar ──────────────────── -->
-      <div class="search-area" id="searchArea">
+      <div id="explorerView" class="explorer-view">
+        <!-- ─── Search Bar ──────────────────── -->
+        <div class="search-area" id="searchArea">
         <div class="search-bar">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
@@ -200,6 +216,101 @@
           <div class="results-viewport" id="resultsViewport"></div>
         </div>
       </div>
+      <!-- ─── End Explorer View ────────────── -->
+
+      <!-- ─── Analytics View ──────────────── -->
+      <div id="analyticsView" class="analytics-view" style="display: none;">
+        <!-- Analytics Top Control Bar -->
+        <div class="analytics-bar">
+          <div class="analytics-bar-left">
+            <div class="analytics-file-badge" id="analyticsFileBadge">
+              <span class="analytics-file-icon">📁</span>
+              <span id="analyticsFileCountText">No files selected</span>
+            </div>
+            <div class="analytics-mode-select">
+              <label for="analyticsGroupMode" class="analytics-label">Group by:</label>
+              <select id="analyticsGroupMode" class="analytics-select">
+                <option value="root">Root domain (e.g. google.com)</option>
+                <option value="exact">Exact hostname (e.g. mail.google.com)</option>
+              </select>
+            </div>
+          </div>
+          <div class="analytics-bar-right">
+            <button class="btn btn-primary btn-run-analytics" id="btnRunAnalytics">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+              </svg>
+              <span>Run Analytics</span>
+            </button>
+            <button class="btn btn-secondary btn-cancel-analytics" id="btnCancelAnalytics" style="display: none;">
+              <span>Cancel</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Progress Banner -->
+        <div class="analytics-progress-card" id="analyticsProgressCard" style="display: none;">
+          <div class="analytics-progress-spinner"></div>
+          <div class="analytics-progress-info">
+            <div class="analytics-progress-text" id="analyticsProgressText">Analyzing logs…</div>
+            <div class="analytics-progress-sub" id="analyticsProgressSub">0 lines processed</div>
+          </div>
+        </div>
+
+        <!-- Empty state before run -->
+        <div class="analytics-empty-state" id="analyticsEmptyState">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <h3>Log Domain Analytics</h3>
+          <p>Select one or more log files from the sidebar and click <strong>Run Analytics</strong> to list all domains sorted by frequency count.</p>
+        </div>
+
+        <!-- Results Toolbar & Summary -->
+        <div class="analytics-results-header" id="analyticsResultsHeader" style="display: none;">
+          <div class="analytics-summary">
+            <span class="analytics-summary-item" id="summaryTotalDomains"><strong>0</strong> unique domains</span>
+            <span class="analytics-summary-dot">•</span>
+            <span class="analytics-summary-item" id="summaryTotalLines"><strong>0</strong> total lines</span>
+            <span class="analytics-summary-dot">•</span>
+            <span class="analytics-summary-item" id="summaryElapsed">0s</span>
+          </div>
+          <div class="analytics-actions">
+            <div class="analytics-filter-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="analytics-search-icon">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <input type="text" id="analyticsFilterInput" class="analytics-filter-input" placeholder="Filter domains (e.g. google, proton)…" autocomplete="off" spellcheck="false">
+              <button class="btn-clear-filter" id="btnClearAnalyticsFilter" style="display: none;">✕</button>
+            </div>
+            <button class="btn btn-sm btn-secondary" id="btnCopyAnalyticsList" title="Copy all domains and counts to clipboard">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
+              </svg>
+              <span>Copy List</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" id="btnExportAnalyticsList" title="Download domains list as TXT file">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Export</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Virtual Scroll Domain List Container -->
+        <div class="analytics-scroll" id="analyticsScroll" style="display: none;">
+          <div class="analytics-table-header">
+            <div class="col-rank">#</div>
+            <div class="col-domain">Domain</div>
+            <div class="col-count">Count</div>
+            <div class="col-actions">Actions</div>
+          </div>
+          <div class="analytics-viewport" id="analyticsViewport"></div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -209,10 +320,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=7"></script>
-  <script src="/js/search.js?v=7"></script>
-  <script src="/js/results.js?v=7"></script>
-  <script src="/js/files.js?v=7"></script>
-  <script src="/js/app.js?v=7"></script>
+  <script src="/js/memory.js?v=8"></script>
+  <script src="/js/search.js?v=8"></script>
+  <script src="/js/results.js?v=8"></script>
+  <script src="/js/analytics.js?v=8"></script>
+  <script src="/js/files.js?v=8"></script>
+  <script src="/js/app.js?v=8"></script>
 </body>
 </html>

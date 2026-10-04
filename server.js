@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const readline = require('readline');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,8 +22,9 @@ const LOGS_DIR = (() => {
 // ripgrep binary name
 const RG_BIN = process.platform === 'win32' ? 'rg.exe' : 'rg';
 
-// Track active search processes for abort
+// Track active search processes and analytics streams for abort
 let activeSearches = new Map();
+let activeAnalytics = new Map();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -734,6 +736,217 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// ─── Domain Extraction & Analytics ─────────────────────────
+
+const TWO_PART_TLDS = new Set([
+  'co', 'com', 'org', 'net', 'gov', 'edu', 'mil', 'ac', 'nom', 'biz', 'info'
+]);
+
+/**
+ * Fast domain extraction from a log line
+ */
+function extractDomain(line) {
+  if (!line) return null;
+  let str = line.trim();
+  const protoIdx = str.indexOf('://');
+  if (protoIdx !== -1) {
+    str = str.substring(protoIdx + 3);
+  }
+
+  let host = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '/' || ch === ':' || ch === ' ' || ch === '\t' || ch === '|') {
+      host = str.substring(0, i);
+      break;
+    }
+  }
+  if (!host) {
+    const colonIdx = str.indexOf(':');
+    host = colonIdx !== -1 ? str.substring(0, colonIdx) : str;
+  }
+
+  host = host.toLowerCase().trim();
+  if (host.startsWith('www.')) {
+    host = host.substring(4);
+  }
+
+  const pIdx = host.indexOf(':');
+  if (pIdx !== -1) {
+    host = host.substring(0, pIdx);
+  }
+
+  if (host.includes('@')) {
+    const atIdx = host.lastIndexOf('@');
+    host = host.substring(atIdx + 1);
+  }
+
+  // IPv4 support
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return host;
+  }
+
+  // Standard domain check
+  if (host.includes('.') && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) {
+    return host;
+  }
+  return null;
+}
+
+/**
+ * Convert full hostname to root domain e.g. accounts.google.com -> google.com
+ */
+function getRootDomain(hostname) {
+  if (!hostname) return null;
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return hostname;
+  }
+  const parts = hostname.split('.');
+  if (parts.length <= 2) return hostname;
+  const secondLast = parts[parts.length - 2];
+  const last = parts[parts.length - 1];
+  if (parts.length >= 3 && TWO_PART_TLDS.has(secondLast) && last.length === 2) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
+// ─── API: Domain Analytics (streaming) ─────────────────────
+
+app.post('/api/analytics/domains', async (req, res) => {
+  const { files = [], groupMode = 'root', analyticsId = null } = req.body;
+
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: 'No files selected for analytics' });
+  }
+
+  const filePaths = [];
+  let totalBytes = 0;
+  for (const f of files) {
+    const p = resolveLogPath(f);
+    if (!p || !fs.existsSync(p)) {
+      return res.status(400).json({ error: `Invalid or missing file: ${f}` });
+    }
+    const stat = fs.statSync(p);
+    totalBytes += stat.size;
+    filePaths.push({ name: f, path: p, size: stat.size });
+  }
+
+  // Abort previous run with same ID
+  if (analyticsId && activeAnalytics.has(analyticsId)) {
+    const prev = activeAnalytics.get(analyticsId);
+    if (prev && prev.abort) prev.abort();
+    activeAnalytics.delete(analyticsId);
+  }
+
+  let aborted = false;
+  const controller = {
+    abort: () => { aborted = true; }
+  };
+  if (analyticsId) {
+    activeAnalytics.set(analyticsId, controller);
+  }
+
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const domainMap = new Map();
+  let totalLines = 0;
+  let processedBytes = 0;
+  const startTime = Date.now();
+  let lastProgressTime = Date.now();
+
+  try {
+    for (const f of filePaths) {
+      if (aborted) break;
+
+      const fileStream = fs.createReadStream(f.path);
+      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+      for await (const line of rl) {
+        if (aborted) {
+          rl.close();
+          fileStream.destroy();
+          break;
+        }
+
+        totalLines++;
+        if (line) {
+          const host = extractDomain(line);
+          if (host) {
+            const key = groupMode === 'root' ? getRootDomain(host) : host;
+            if (key) {
+              domainMap.set(key, (domainMap.get(key) || 0) + 1);
+            }
+          }
+        }
+
+        const now = Date.now();
+        if (now - lastProgressTime > 400) {
+          lastProgressTime = now;
+          if (!res.writableEnded) {
+            res.write(JSON.stringify({
+              type: 'progress',
+              currentFile: f.name,
+              totalLines,
+              uniqueDomains: domainMap.size,
+              elapsed: ((now - startTime) / 1000).toFixed(1) + 's'
+            }) + '\n');
+          }
+        }
+      }
+
+      processedBytes += f.size;
+    }
+
+    if (analyticsId) activeAnalytics.delete(analyticsId);
+
+    if (aborted) {
+      if (!res.writableEnded) {
+        res.write(JSON.stringify({ type: 'aborted', message: 'Analysis cancelled' }) + '\n');
+        res.end();
+      }
+      return;
+    }
+
+    // Sort domains from largest to smallest count
+    const sortedDomains = Array.from(domainMap.entries())
+      .map(([domain, count]) => ({ domain, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    if (!res.writableEnded) {
+      res.write(JSON.stringify({
+        type: 'complete',
+        totalLines,
+        uniqueDomains: sortedDomains.length,
+        elapsed: elapsed + 's',
+        domains: sortedDomains
+      }) + '\n');
+      res.end();
+    }
+  } catch (err) {
+    if (analyticsId) activeAnalytics.delete(analyticsId);
+    if (!res.writableEnded) {
+      res.write(JSON.stringify({ type: 'error', message: err.message }) + '\n');
+      res.end();
+    }
+  }
+});
+
+app.post('/api/analytics/abort', (req, res) => {
+  const { analyticsId } = req.body;
+  if (analyticsId && activeAnalytics.has(analyticsId)) {
+    const controller = activeAnalytics.get(analyticsId);
+    if (controller && controller.abort) controller.abort();
+    activeAnalytics.delete(analyticsId);
+    return res.json({ success: true, message: 'Analysis aborted' });
+  }
+  res.json({ success: false, message: 'No active analysis found' });
+});
 
 // ─── API: Count matches (fast) ────────────────────────────
 
