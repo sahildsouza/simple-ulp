@@ -1,7 +1,7 @@
 /**
  * Log Analytics Module for Simple ULP
- * Provides multi-file domain frequency analysis, streaming progress,
- * virtualized domain list rendering, and instant search filtering.
+ * Provides multi-file domain frequency analysis, live progress bar streaming,
+ * live top domain previews, virtualized domain list rendering, and instant search filtering.
  */
 
 const AnalyticsApp = (() => {
@@ -13,7 +13,7 @@ const AnalyticsApp = (() => {
   let activeAnalyticsId = null;
 
   let allDomains = []; // Array of { domain: string, count: number }
-  let filteredDomains = []; // Filtered by search box
+  let filteredDomains = []; // Filtered by search box or live preview
   let topDomainCount = 1;
   let lastAnalyzedFiles = [];
 
@@ -56,16 +56,6 @@ const AnalyticsApp = (() => {
     const btnInside = document.getElementById('btnTriggerRunInside');
     if (btnInside) {
       btnInside.addEventListener('click', () => startAnalytics());
-    }
-
-    // Group mode change listener
-    const groupSelect = document.getElementById('analyticsGroupMode');
-    if (groupSelect) {
-      groupSelect.addEventListener('change', () => {
-        if (currentView === 'analytics' && getSelectedFiles().length > 0) {
-          startAnalytics();
-        }
-      });
     }
 
     // Filter input
@@ -147,22 +137,21 @@ const AnalyticsApp = (() => {
 
       const files = getSelectedFiles();
       if (files.length === 0) {
-        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list all domains.');
+        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.');
       } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
+        // Already have analyzed results for this exact file selection
         hideTableMessage();
         requestAnimationFrame(renderVisible);
-      } else if (files.length <= 5) {
-        // Auto-run analysis when switching to tab with a reasonable selection
-        startAnalytics();
       } else {
-        // Many files selected (e.g. 40+ files / 50 GB) — prompt with 1-click button
-        showTableMessage('📁', `${files.length} Files Selected`, 'Click the button below to analyze all selected files, or select specific files from the left sidebar.', true);
+        // Files are selected, but DO NOT auto-scan: offer the option to run with live progress bar
+        const filesDesc = files.length === 1 ? files[0] : `${files.length} log files`;
+        showTableMessage('📊', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true);
       }
     } else {
       if (navAnalytics) navAnalytics.classList.remove('active');
       if (navExplorer) navExplorer.classList.add('active');
       if (analyticsView) analyticsView.style.display = 'none';
-      if (explorerView) explorerView.style.display = 'block';
+      if (explorerView) explorerView.style.display = 'flex';
       window.location.hash = '#explorer';
       if (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.renderVisible) {
         ResultsRenderer.renderVisible();
@@ -201,9 +190,10 @@ const AnalyticsApp = (() => {
         visibleNodes.clear();
         if (viewport) viewport.style.height = '0px';
         showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.');
-      } else if (selected.length === 1 && !filesEqual(selected, lastAnalyzedFiles)) {
-        // Single file changed in sidebar while on analytics tab -> auto analyze immediately
-        startAnalytics();
+      } else if (!filesEqual(selected, lastAnalyzedFiles)) {
+        // Files changed: prompt user to run analytics (DO NOT auto-scan)
+        const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
+        showTableMessage('📊', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true);
       }
     }
   }
@@ -219,7 +209,10 @@ const AnalyticsApp = (() => {
     if (iconEl) iconEl.textContent = icon;
     if (titleEl) titleEl.textContent = title;
     if (descEl) descEl.textContent = desc;
-    if (btnInside) btnInside.style.display = showRunBtn ? 'inline-flex' : 'none';
+    if (btnInside) {
+      btnInside.style.display = showRunBtn ? 'inline-flex' : 'none';
+      btnInside.textContent = 'Run Analytics Now';
+    }
 
     msgEl.style.display = 'flex';
   }
@@ -230,7 +223,7 @@ const AnalyticsApp = (() => {
   }
 
   /**
-   * Start domain analytics run
+   * Start domain analytics run with live progress bar
    */
   async function startAnalytics() {
     if (isRunning) return;
@@ -251,7 +244,14 @@ const AnalyticsApp = (() => {
     lastAnalyzedFiles = [...files];
     activeAnalyticsId = 'analytics_' + Date.now();
 
-    // UI state updates
+    // Reset results state
+    allDomains = [];
+    filteredDomains = [];
+    visibleNodes.forEach(node => node.remove());
+    visibleNodes.clear();
+    if (viewport) viewport.style.height = '0px';
+
+    // Toolbar buttons
     const btnRun = document.getElementById('btnRunAnalytics');
     const btnCancel = document.getElementById('btnCancelAnalytics');
     const runText = document.getElementById('btnRunAnalyticsText');
@@ -260,15 +260,32 @@ const AnalyticsApp = (() => {
 
     if (btnRun) btnRun.style.display = 'none';
     if (btnCancel) btnCancel.style.display = 'inline-flex';
-    if (runText) runText.textContent = 'Analyzing…';
+    if (runText) runText.textContent = 'Scanning…';
 
     if (summaryBar) summaryBar.style.display = 'none';
     if (statusBarText) {
       statusBarText.className = 'analytics-status-text scanning';
-      statusBarText.textContent = `Analyzing ${files.length} file(s)…`;
+      statusBarText.textContent = `Scanning ${files.length} file(s)…`;
     }
 
-    showTableMessage('⏳', 'Scanning Log Files…', `Reading ${files.length} selected log file(s) and aggregating unique domains…`);
+    // Show Live Progress Banner
+    const liveBanner = document.getElementById('analyticsLiveBanner');
+    const liveBar = document.getElementById('analyticsProgressBar');
+    const liveTitle = document.getElementById('analyticsLiveTitle');
+    const liveSpeed = document.getElementById('analyticsLiveSpeed');
+    const liveElapsed = document.getElementById('analyticsLiveElapsed');
+    const liveDomains = document.getElementById('analyticsLiveDomains');
+    const liveSub = document.getElementById('analyticsLiveSub');
+
+    if (liveBanner) liveBanner.style.display = 'flex';
+    if (liveBar) liveBar.style.width = '0%';
+    if (liveTitle) liveTitle.textContent = `Starting scan on ${files.length} file(s)…`;
+    if (liveSpeed) liveSpeed.textContent = '0 lines/s';
+    if (liveElapsed) liveElapsed.textContent = '0.0s';
+    if (liveDomains) liveDomains.textContent = '0 unique domains';
+    if (liveSub) liveSub.textContent = 'Reading files…';
+
+    showTableMessage('⏳', 'Scanning in Progress…', `Reading ${files.length} selected log file(s) with live domain streaming…`);
 
     try {
       const res = await fetch('/api/analytics/domains', {
@@ -317,25 +334,57 @@ const AnalyticsApp = (() => {
       if (typeof showToast === 'function') {
         showToast(`Analytics failed: ${err.message}`, 'error');
       }
+      const liveBanner = document.getElementById('analyticsLiveBanner');
+      if (liveBanner) liveBanner.style.display = 'none';
       showTableMessage('❌', 'Analysis Failed', err.message, true);
       resetRunUI();
     }
   }
 
   /**
-   * Handle streaming messages from backend
+   * Handle streaming messages from backend with live progress & streaming results
    */
   function handleAnalyticsMessage(data) {
+    const liveBar = document.getElementById('analyticsProgressBar');
+    const liveTitle = document.getElementById('analyticsLiveTitle');
+    const liveSpeed = document.getElementById('analyticsLiveSpeed');
+    const liveElapsed = document.getElementById('analyticsLiveElapsed');
+    const liveDomains = document.getElementById('analyticsLiveDomains');
+    const liveSub = document.getElementById('analyticsLiveSub');
     const statusBarText = document.getElementById('analyticsStatusText');
     const summaryBar = document.getElementById('analyticsSummary');
 
     if (data.type === 'progress') {
+      const pct = Math.min(99, Math.max(1, data.percent || 1));
+      if (liveBar) liveBar.style.width = pct + '%';
+      if (liveTitle) liveTitle.textContent = `Scanning ${data.currentFile || 'logs'} (${pct}%)`;
+      if (liveSpeed) liveSpeed.textContent = `⚡ ${(data.linesPerSec || 0).toLocaleString()} lines/s`;
+      if (liveElapsed) liveElapsed.textContent = `⏱️ ${data.elapsed || '0s'}`;
+      if (liveDomains) liveDomains.textContent = `🎯 ${(data.uniqueDomains || 0).toLocaleString()} domains`;
+      if (liveSub) liveSub.textContent = `${(data.totalLines || 0).toLocaleString()} lines processed`;
+
       if (statusBarText) {
         statusBarText.className = 'analytics-status-text scanning';
-        statusBarText.textContent = `Scanning: ${data.totalLines.toLocaleString()} lines • ${data.uniqueDomains.toLocaleString()} unique domains (${data.elapsed})`;
+        statusBarText.textContent = `Scanning: ${(data.totalLines || 0).toLocaleString()} lines • ${(data.uniqueDomains || 0).toLocaleString()} unique domains (${pct}%)`;
       }
-      showTableMessage('⏳', 'Scanning in Progress…', `${data.totalLines.toLocaleString()} lines processed • ${data.uniqueDomains.toLocaleString()} unique domains found in ${data.currentFile || 'logs'} (${data.elapsed})`);
+
+      // Live stream top domain results into the table as it scans!
+      if (Array.isArray(data.topDomains) && data.topDomains.length > 0) {
+        const filterInput = document.getElementById('analyticsFilterInput');
+        const filterVal = filterInput ? filterInput.value.trim() : '';
+        // If not actively typing a filter, stream live top domains
+        if (!filterVal) {
+          hideTableMessage();
+          filteredDomains = data.topDomains;
+          topDomainCount = data.topDomains[0]?.count || 1;
+          if (viewport) viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
+          renderVisible();
+        }
+      }
     } else if (data.type === 'complete') {
+      const liveBanner = document.getElementById('analyticsLiveBanner');
+      if (liveBanner) liveBanner.style.display = 'none';
+
       allDomains = data.domains || [];
       topDomainCount = allDomains.length > 0 ? (allDomains[0].count || 1) : 1;
 
@@ -350,7 +399,7 @@ const AnalyticsApp = (() => {
 
       if (statusBarText) {
         statusBarText.className = 'analytics-status-text';
-        statusBarText.textContent = `Completed in ${data.elapsed}`;
+        statusBarText.textContent = `Scan finished in ${data.elapsed} (${(data.linesPerSec || 0).toLocaleString()} lines/s)`;
       }
       if (summaryBar) summaryBar.style.display = 'flex';
 
@@ -367,12 +416,18 @@ const AnalyticsApp = (() => {
         showToast(`Analytics complete: ${data.uniqueDomains.toLocaleString()} domains in ${data.elapsed}`, 'success');
       }
     } else if (data.type === 'aborted') {
+      const liveBanner = document.getElementById('analyticsLiveBanner');
+      if (liveBanner) liveBanner.style.display = 'none';
+
       if (typeof showToast === 'function') {
         showToast('Analysis cancelled', 'info');
       }
-      showTableMessage('🛑', 'Analysis Cancelled', 'Domain extraction was stopped.', true);
+      showTableMessage('🛑', 'Analysis Cancelled', 'Domain extraction was stopped. Click below to run again.', true);
       resetRunUI();
     } else if (data.type === 'error') {
+      const liveBanner = document.getElementById('analyticsLiveBanner');
+      if (liveBanner) liveBanner.style.display = 'none';
+
       if (typeof showToast === 'function') {
         showToast(`Error: ${data.message}`, 'error');
       }
@@ -396,6 +451,9 @@ const AnalyticsApp = (() => {
     } catch (_) {}
 
     resetRunUI();
+    const liveBanner = document.getElementById('analyticsLiveBanner');
+    if (liveBanner) liveBanner.style.display = 'none';
+
     if (typeof showToast === 'function') {
       showToast('Stopping analysis…', 'info');
     }
@@ -411,7 +469,7 @@ const AnalyticsApp = (() => {
 
     if (btnRun) btnRun.style.display = 'inline-flex';
     if (btnCancel) btnCancel.style.display = 'none';
-    if (runText) runText.textContent = 'Analyze';
+    if (runText) runText.textContent = 'Run Analytics';
   }
 
   /**

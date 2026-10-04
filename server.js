@@ -863,6 +863,34 @@ app.post('/api/analytics/domains', async (req, res) => {
   const startTime = Date.now();
   let lastProgressTime = Date.now();
 
+  // Online top 35 domains tracking for live streaming
+  let topList = [];
+  let minTopCount = 0;
+
+  function recordDomain(key) {
+    const count = (domainMap.get(key) || 0) + 1;
+    domainMap.set(key, count);
+
+    if (count >= minTopCount || topList.length < 35) {
+      let found = false;
+      for (let i = 0; i < topList.length; i++) {
+        if (topList[i].domain === key) {
+          topList[i].count = count;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        topList.push({ domain: key, count });
+      }
+      if (topList.length > 50) {
+        topList.sort((a, b) => b.count - a.count);
+        topList = topList.slice(0, 35);
+        minTopCount = topList[topList.length - 1].count;
+      }
+    }
+  }
+
   try {
     for (const f of filePaths) {
       if (aborted) break;
@@ -883,7 +911,7 @@ app.post('/api/analytics/domains', async (req, res) => {
           if (host) {
             const key = groupMode === 'root' ? getRootDomain(host) : host;
             if (key) {
-              domainMap.set(key, (domainMap.get(key) || 0) + 1);
+              recordDomain(key);
             }
           }
         }
@@ -892,12 +920,21 @@ app.post('/api/analytics/domains', async (req, res) => {
         if (now - lastProgressTime > 400) {
           lastProgressTime = now;
           if (!res.writableEnded) {
+            const currentBytes = processedBytes + (fileStream.bytesRead || 0);
+            const percent = totalBytes > 0 ? Math.min(99, Math.round((currentBytes / totalBytes) * 100)) : 0;
+            const elapsedSec = (now - startTime) / 1000;
+            const linesPerSec = elapsedSec > 0 ? Math.round(totalLines / elapsedSec) : 0;
+            const liveTop = topList.slice().sort((a, b) => b.count - a.count).slice(0, 35);
+
             res.write(JSON.stringify({
               type: 'progress',
               currentFile: f.name,
               totalLines,
               uniqueDomains: domainMap.size,
-              elapsed: ((now - startTime) / 1000).toFixed(1) + 's'
+              percent,
+              linesPerSec,
+              elapsed: elapsedSec.toFixed(1) + 's',
+              topDomains: liveTop
             }) + '\n');
           }
         }

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=9">
+  <link rel="stylesheet" href="/css/style.css?v=10">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -269,6 +269,30 @@
           </div>
         </div>
 
+        <!-- Live Animated Progress Bar Banner (Shown during scan) -->
+        <div class="analytics-live-banner" id="analyticsLiveBanner" style="display: none;">
+          <div class="analytics-live-row">
+            <div class="analytics-live-title">
+              <span class="analytics-pulse-dot"></span>
+              <span id="analyticsLiveTitle">Scanning logs…</span>
+            </div>
+            <div class="analytics-live-stats">
+              <span id="analyticsLiveSpeed">0 lines/s</span>
+              <span>•</span>
+              <span id="analyticsLiveElapsed">0.0s</span>
+              <span>•</span>
+              <span id="analyticsLiveDomains">0 unique domains</span>
+            </div>
+          </div>
+          <div class="analytics-progress-track">
+            <div class="analytics-progress-bar" id="analyticsProgressBar" style="width: 0%;"></div>
+          </div>
+          <div class="analytics-live-footer">
+            <span id="analyticsLiveSub">Reading selected files…</span>
+            <span class="live-pill">🟢 Live Streaming</span>
+          </div>
+        </div>
+
         <!-- Live Progress / Summary Bar -->
         <div class="analytics-status-bar" id="analyticsStatusBar">
           <div class="analytics-status-left">
@@ -311,11 +335,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=9"></script>
-  <script src="/js/search.js?v=9"></script>
-  <script src="/js/results.js?v=9"></script>
-  <script src="/js/analytics.js?v=9"></script>
-  <script src="/js/files.js?v=9"></script>
-  <script src="/js/app.js?v=9"></script>
+  <script src="/js/memory.js?v=10"></script>
+  <script src="/js/search.js?v=10"></script>
+  <script src="/js/results.js?v=10"></script>
+  <script src="/js/analytics.js?v=10"></script>
+  <script src="/js/files.js?v=10"></script>
+  <script src="/js/app.js?v=10"></script>
 </body>
 </html>
