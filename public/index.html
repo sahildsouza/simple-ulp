@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULP Log Explorer</title>
+  <meta name="description" content="Fast log file search and exploration tool powered by ripgrep">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- ─── Header ──────────────────────────────── -->
+  <header class="header" id="header">
+    <div class="header-left">
+      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle file sidebar">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <h1 class="header-title">
+        <svg class="header-icon" width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 2v6h6M8 13h8M8 17h8M8 9h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Log Explorer
+      </h1>
+    </div>
+    <div class="header-right">
+      <span class="header-badge" id="logsDir" title="Logs directory"></span>
+    </div>
+  </header>
+
+  <!-- ─── Main Layout ─────────────────────────── -->
+  <div class="layout" id="layout">
+    <!-- ─── Sidebar ─────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2 class="sidebar-title">Files</h2>
+        <button class="btn-icon btn-refresh" id="refreshFiles" aria-label="Refresh file list" title="Refresh">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="sidebar-actions">
+        <button class="btn btn-sm btn-secondary" id="selectAll">Select all</button>
+        <button class="btn btn-sm btn-secondary" id="selectNone">Clear</button>
+      </div>
+      <div class="file-list" id="fileList">
+        <div class="file-list-empty">Loading files…</div>
+      </div>
+    </aside>
+
+    <!-- ─── Main Content ────────────────────── -->
+    <main class="main" id="main">
+      <!-- ─── Search Bar ──────────────────── -->
+      <div class="search-area" id="searchArea">
+        <div class="search-bar">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+            <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <input
+            type="text"
+            class="search-input"
+            id="searchInput"
+            placeholder="Search logs… (Enter or click Search)"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button class="btn-icon btn-clear" id="clearSearch" aria-label="Clear search" title="Clear (Esc)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="btn-search-action" id="searchActionBtn" type="button" aria-label="Search" title="Search (Enter)">
+            <svg class="search-btn-icon icon-search" id="iconSearch" width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.5"/>
+              <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <svg class="search-btn-icon icon-stop" id="iconStop" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+              <rect x="5" y="5" width="14" height="14" rx="2"/>
+            </svg>
+            <span class="search-btn-text" id="searchBtnText">Search</span>
+          </button>
+        </div>
+
+        <!-- ─── Search Options ──────────── -->
+        <div class="search-options">
+          <div class="search-toggles">
+            <button class="toggle-btn active" id="modeLiteral" data-mode="literal" title="Literal match (exact text)">
+              <span>Abc</span>
+            </button>
+            <button class="toggle-btn" id="modeRegex" data-mode="regex" title="Regular expression">
+              <span>.*</span>
+            </button>
+            <button class="toggle-btn" id="modeWord" data-mode="word" title="Whole word match">
+              <span>\b</span>
+            </button>
+            <div class="toggle-divider"></div>
+            <button class="toggle-btn" id="toggleCase" title="Case sensitive (Alt+C)">
+              <span>Aa</span>
+            </button>
+            <button class="toggle-btn" id="toggleInvert" title="Invert match (exclude)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <select class="select-field" id="fieldFilter" title="Search field mode (Alt+U)">
+              <option value="">All fields</option>
+              <option value="url">URL only</option>
+              <option value="username">Username only</option>
+              <option value="password">Password only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Result Modes Toolbar ─────── -->
+      <div class="result-modes-bar" id="resultModesBar">
+        <div class="result-modes" id="resultModes">
+          <button class="mode-tab active" data-view="raw" id="tabModeRaw" title="Raw full log lines">
+            <span class="mode-tab-label">RAW</span>
+            <span class="mode-tab-count" id="countRaw">0</span>
+          </button>
+          <button class="mode-tab" data-view="email" id="tabModeEmail" title="Email:password format with individual copy">
+            <svg class="mode-tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/>
+              <polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <span class="mode-tab-label">Email:pass</span>
+            <span class="mode-tab-count" id="countEmail">0</span>
+          </button>
+          <button class="mode-tab" data-view="username" id="tabModeUser" title="Username:password format with individual copy">
+            <svg class="mode-tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2"/>
+              <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <span class="mode-tab-label">User:pass</span>
+            <span class="mode-tab-count" id="countUser">0</span>
+          </button>
+          <button class="mode-tab" data-view="phone" id="tabModePhone" title="Phone:password format with individual copy">
+            <svg class="mode-tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <span class="mode-tab-label">Phone:pass</span>
+            <span class="mode-tab-count" id="countPhone">0</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ─── Results Stats ─────────────── -->
+      <div class="results-stats" id="resultsStats">
+        <span class="stats-text" id="statsText">Ready — select files and start searching</span>
+        <div class="stats-actions">
+          <button class="btn btn-sm btn-secondary" id="exportResults" title="Export results" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Export
+          </button>
+        </div>
+      </div>
+
+      <!-- ─── Results Container ─────────── -->
+      <div class="results-container" id="resultsContainer">
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+          <svg class="empty-icon" width="64" height="64" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <p class="empty-title">Search your logs</p>
+          <p class="empty-desc">Select one or more files and type a query to begin</p>
+          <div class="empty-shortcuts">
+            <kbd>Ctrl</kbd> + <kbd>K</kbd> Focus search
+            <span class="shortcut-sep">·</span>
+            <kbd>Esc</kbd> Clear
+          </div>
+        </div>
+
+        <!-- Loading state -->
+        <div class="loading-state" id="loadingState" style="display:none;">
+          <div class="loading-spinner"></div>
+          <p class="loading-text">Searching…</p>
+        </div>
+
+        <!-- Error state -->
+        <div class="error-state" id="errorState" style="display:none;">
+          <svg class="error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <p class="error-title" id="errorTitle">Search failed</p>
+          <p class="error-desc" id="errorDesc"></p>
+        </div>
+
+        <!-- Virtual scroll results -->
+        <div class="results-scroll" id="resultsScroll" style="display:none;">
+          <div class="results-viewport" id="resultsViewport"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ─── Sidebar overlay for mobile ──────── -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ─── Toast notifications ─────────────── -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/js/memory.js"></script>
+  <script src="/js/search.js"></script>
+  <script src="/js/results.js"></script>
+  <script src="/js/files.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
