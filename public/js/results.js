@@ -194,18 +194,10 @@ const ResultsRenderer = (() => {
   }
 
   /**
-   * Update count numbers in the tab buttons
+   * Update count numbers in the tab buttons (disabled - counts removed from tabs)
    */
   function updateTabCounts() {
-    const rawEl = document.getElementById('countRaw');
-    const emailEl = document.getElementById('countEmail');
-    const userEl = document.getElementById('countUser');
-    const phoneEl = document.getElementById('countPhone');
-
-    if (rawEl) rawEl.textContent = counts.raw.toLocaleString();
-    if (emailEl) emailEl.textContent = counts.email.toLocaleString();
-    if (userEl) userEl.textContent = counts.username.toLocaleString();
-    if (phoneEl) phoneEl.textContent = counts.phone.toLocaleString();
+    // Mode tabs no longer display individual counts
   }
 
   /**
