@@ -37,6 +37,11 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+// Direct route for /analytics
+app.get('/analytics', (req, res) => {
+  res.redirect('/#analytics');
+});
+
 // Known non-log files/extensions to ignore
 const IGNORED_FILES = new Set(['server.js', 'package.json', 'package-lock.json', 'README.md', '.gitignore']);
 const LOG_EXTENSIONS = new Set(['.txt', '.log', '.csv', '.tsv', '.dat', '.jsonl', '.out']);

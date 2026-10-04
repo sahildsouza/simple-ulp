@@ -15,6 +15,7 @@ const AnalyticsApp = (() => {
   let allDomains = []; // Array of { domain: string, count: number }
   let filteredDomains = []; // Filtered by search box
   let topDomainCount = 1;
+  let lastAnalyzedFiles = [];
 
   let currentView = 'explorer'; // 'explorer' | 'analytics'
   let scrollContainer = null;
@@ -45,11 +46,26 @@ const AnalyticsApp = (() => {
     // Run / Cancel buttons
     const btnRun = document.getElementById('btnRunAnalytics');
     if (btnRun) {
-      btnRun.addEventListener('click', startAnalytics);
+      btnRun.addEventListener('click', () => startAnalytics());
     }
     const btnCancel = document.getElementById('btnCancelAnalytics');
     if (btnCancel) {
       btnCancel.addEventListener('click', cancelAnalytics);
+    }
+
+    const btnInside = document.getElementById('btnTriggerRunInside');
+    if (btnInside) {
+      btnInside.addEventListener('click', () => startAnalytics());
+    }
+
+    // Group mode change listener
+    const groupSelect = document.getElementById('analyticsGroupMode');
+    if (groupSelect) {
+      groupSelect.addEventListener('change', () => {
+        if (currentView === 'analytics' && getSelectedFiles().length > 0) {
+          startAnalytics();
+        }
+      });
     }
 
     // Filter input
@@ -100,6 +116,15 @@ const AnalyticsApp = (() => {
         switchView('explorer');
       }
     });
+
+    updateFileBadge();
+  }
+
+  function getSelectedFiles() {
+    if (typeof FileManager !== 'undefined' && FileManager.getSelected) {
+      return FileManager.getSelected();
+    }
+    return [];
   }
 
   /**
@@ -119,17 +144,37 @@ const AnalyticsApp = (() => {
       if (analyticsView) analyticsView.style.display = 'flex';
       window.location.hash = '#analytics';
       updateFileBadge();
-      requestAnimationFrame(renderVisible);
+
+      const files = getSelectedFiles();
+      if (files.length === 0) {
+        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list all domains.');
+      } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
+        hideTableMessage();
+        requestAnimationFrame(renderVisible);
+      } else if (files.length <= 5) {
+        // Auto-run analysis when switching to tab with a reasonable selection
+        startAnalytics();
+      } else {
+        // Many files selected (e.g. 40+ files / 50 GB) — prompt with 1-click button
+        showTableMessage('📁', `${files.length} Files Selected`, 'Click the button below to analyze all selected files, or select specific files from the left sidebar.', true);
+      }
     } else {
       if (navAnalytics) navAnalytics.classList.remove('active');
       if (navExplorer) navExplorer.classList.add('active');
       if (analyticsView) analyticsView.style.display = 'none';
       if (explorerView) explorerView.style.display = 'block';
       window.location.hash = '#explorer';
-      if (typeof ResultsRenderer !== 'undefined') {
+      if (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.renderVisible) {
         ResultsRenderer.renderVisible();
       }
     }
+  }
+
+  function filesEqual(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    const sa = [...a].sort();
+    const sb = [...b].sort();
+    return sa.every((val, idx) => val === sb[idx]);
   }
 
   /**
@@ -139,11 +184,7 @@ const AnalyticsApp = (() => {
     const badgeText = document.getElementById('analyticsFileCountText');
     if (!badgeText) return;
 
-    let selected = [];
-    if (typeof FileManager !== 'undefined' && FileManager.getSelected) {
-      selected = FileManager.getSelected();
-    }
-
+    const selected = getSelectedFiles();
     if (selected.length === 0) {
       badgeText.textContent = 'No files selected';
     } else if (selected.length === 1) {
@@ -151,6 +192,41 @@ const AnalyticsApp = (() => {
     } else {
       badgeText.textContent = `${selected.length} files selected`;
     }
+
+    if (currentView === 'analytics' && !isRunning) {
+      if (selected.length === 0) {
+        allDomains = [];
+        filteredDomains = [];
+        visibleNodes.forEach(node => node.remove());
+        visibleNodes.clear();
+        if (viewport) viewport.style.height = '0px';
+        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.');
+      } else if (selected.length === 1 && !filesEqual(selected, lastAnalyzedFiles)) {
+        // Single file changed in sidebar while on analytics tab -> auto analyze immediately
+        startAnalytics();
+      }
+    }
+  }
+
+  function showTableMessage(icon, title, desc, showRunBtn = false) {
+    const msgEl = document.getElementById('analyticsTableMessage');
+    const iconEl = document.getElementById('analyticsMsgIcon');
+    const titleEl = document.getElementById('analyticsMsgTitle');
+    const descEl = document.getElementById('analyticsMsgDesc');
+    const btnInside = document.getElementById('btnTriggerRunInside');
+
+    if (!msgEl) return;
+    if (iconEl) iconEl.textContent = icon;
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+    if (btnInside) btnInside.style.display = showRunBtn ? 'inline-flex' : 'none';
+
+    msgEl.style.display = 'flex';
+  }
+
+  function hideTableMessage() {
+    const msgEl = document.getElementById('analyticsTableMessage');
+    if (msgEl) msgEl.style.display = 'none';
   }
 
   /**
@@ -159,16 +235,11 @@ const AnalyticsApp = (() => {
   async function startAnalytics() {
     if (isRunning) return;
 
-    let files = [];
-    if (typeof FileManager !== 'undefined' && FileManager.getSelected) {
-      files = FileManager.getSelected();
-    }
-
+    const files = getSelectedFiles();
     if (!files || files.length === 0) {
+      showTableMessage('⚠️', 'No Files Selected', 'Please select at least one file from the left sidebar.');
       if (typeof showToast === 'function') {
         showToast('Please select at least one file from the sidebar', 'warning');
-      } else {
-        alert('Please select at least one file from the sidebar');
       }
       return;
     }
@@ -177,27 +248,27 @@ const AnalyticsApp = (() => {
     const groupMode = groupModeSelect ? groupModeSelect.value : 'root';
 
     isRunning = true;
+    lastAnalyzedFiles = [...files];
     activeAnalyticsId = 'analytics_' + Date.now();
 
     // UI state updates
     const btnRun = document.getElementById('btnRunAnalytics');
     const btnCancel = document.getElementById('btnCancelAnalytics');
-    const emptyState = document.getElementById('analyticsEmptyState');
-    const progressCard = document.getElementById('analyticsProgressCard');
-    const progressText = document.getElementById('analyticsProgressText');
-    const progressSub = document.getElementById('analyticsProgressSub');
-    const resultsHeader = document.getElementById('analyticsResultsHeader');
-    const scrollEl = document.getElementById('analyticsScroll');
+    const runText = document.getElementById('btnRunAnalyticsText');
+    const statusBarText = document.getElementById('analyticsStatusText');
+    const summaryBar = document.getElementById('analyticsSummary');
 
     if (btnRun) btnRun.style.display = 'none';
     if (btnCancel) btnCancel.style.display = 'inline-flex';
-    if (emptyState) emptyState.style.display = 'none';
-    if (resultsHeader) resultsHeader.style.display = 'none';
-    if (scrollEl) scrollEl.style.display = 'none';
+    if (runText) runText.textContent = 'Analyzing…';
 
-    if (progressCard) progressCard.style.display = 'flex';
-    if (progressText) progressText.textContent = 'Starting domain analysis…';
-    if (progressSub) progressSub.textContent = `Reading ${files.length} file(s)…`;
+    if (summaryBar) summaryBar.style.display = 'none';
+    if (statusBarText) {
+      statusBarText.className = 'analytics-status-text scanning';
+      statusBarText.textContent = `Analyzing ${files.length} file(s)…`;
+    }
+
+    showTableMessage('⏳', 'Scanning Log Files…', `Reading ${files.length} selected log file(s) and aggregating unique domains…`);
 
     try {
       const res = await fetch('/api/analytics/domains', {
@@ -246,6 +317,7 @@ const AnalyticsApp = (() => {
       if (typeof showToast === 'function') {
         showToast(`Analytics failed: ${err.message}`, 'error');
       }
+      showTableMessage('❌', 'Analysis Failed', err.message, true);
       resetRunUI();
     }
   }
@@ -254,15 +326,15 @@ const AnalyticsApp = (() => {
    * Handle streaming messages from backend
    */
   function handleAnalyticsMessage(data) {
+    const statusBarText = document.getElementById('analyticsStatusText');
+    const summaryBar = document.getElementById('analyticsSummary');
+
     if (data.type === 'progress') {
-      const progressText = document.getElementById('analyticsProgressText');
-      const progressSub = document.getElementById('analyticsProgressSub');
-      if (progressText) {
-        progressText.textContent = `Scanning: ${data.totalLines.toLocaleString()} lines processed (${data.elapsed})`;
+      if (statusBarText) {
+        statusBarText.className = 'analytics-status-text scanning';
+        statusBarText.textContent = `Scanning: ${data.totalLines.toLocaleString()} lines • ${data.uniqueDomains.toLocaleString()} unique domains (${data.elapsed})`;
       }
-      if (progressSub) {
-        progressSub.textContent = `Found ${data.uniqueDomains.toLocaleString()} unique domains in ${data.currentFile || 'logs'}`;
-      }
+      showTableMessage('⏳', 'Scanning in Progress…', `${data.totalLines.toLocaleString()} lines processed • ${data.uniqueDomains.toLocaleString()} unique domains found in ${data.currentFile || 'logs'} (${data.elapsed})`);
     } else if (data.type === 'complete') {
       allDomains = data.domains || [];
       topDomainCount = allDomains.length > 0 ? (allDomains[0].count || 1) : 1;
@@ -276,17 +348,20 @@ const AnalyticsApp = (() => {
       if (sLines) sLines.innerHTML = `<strong>${data.totalLines.toLocaleString()}</strong> total lines`;
       if (sElapsed) sElapsed.textContent = data.elapsed;
 
+      if (statusBarText) {
+        statusBarText.className = 'analytics-status-text';
+        statusBarText.textContent = `Completed in ${data.elapsed}`;
+      }
+      if (summaryBar) summaryBar.style.display = 'flex';
+
       resetRunUI();
 
-      const progressCard = document.getElementById('analyticsProgressCard');
-      const resultsHeader = document.getElementById('analyticsResultsHeader');
-      const scrollEl = document.getElementById('analyticsScroll');
-
-      if (progressCard) progressCard.style.display = 'none';
-      if (resultsHeader) resultsHeader.style.display = 'flex';
-      if (scrollEl) scrollEl.style.display = 'block';
-
-      applyFilter();
+      if (allDomains.length === 0) {
+        showTableMessage('🔍', 'No Domains Found', 'No valid domains or URLs were extracted from the selected log file(s).');
+      } else {
+        hideTableMessage();
+        applyFilter();
+      }
 
       if (typeof showToast === 'function') {
         showToast(`Analytics complete: ${data.uniqueDomains.toLocaleString()} domains in ${data.elapsed}`, 'success');
@@ -295,11 +370,13 @@ const AnalyticsApp = (() => {
       if (typeof showToast === 'function') {
         showToast('Analysis cancelled', 'info');
       }
+      showTableMessage('🛑', 'Analysis Cancelled', 'Domain extraction was stopped.', true);
       resetRunUI();
     } else if (data.type === 'error') {
       if (typeof showToast === 'function') {
         showToast(`Error: ${data.message}`, 'error');
       }
+      showTableMessage('❌', 'Error During Analysis', data.message, true);
       resetRunUI();
     }
   }
@@ -320,7 +397,7 @@ const AnalyticsApp = (() => {
 
     resetRunUI();
     if (typeof showToast === 'function') {
-      showToast('Cancelling analysis…', 'info');
+      showToast('Stopping analysis…', 'info');
     }
   }
 
@@ -330,11 +407,11 @@ const AnalyticsApp = (() => {
 
     const btnRun = document.getElementById('btnRunAnalytics');
     const btnCancel = document.getElementById('btnCancelAnalytics');
-    const progressCard = document.getElementById('analyticsProgressCard');
+    const runText = document.getElementById('btnRunAnalyticsText');
 
     if (btnRun) btnRun.style.display = 'inline-flex';
     if (btnCancel) btnCancel.style.display = 'none';
-    if (progressCard && allDomains.length > 0) progressCard.style.display = 'none';
+    if (runText) runText.textContent = 'Analyze';
   }
 
   /**
@@ -353,6 +430,14 @@ const AnalyticsApp = (() => {
     // Clear existing nodes
     visibleNodes.forEach(node => node.remove());
     visibleNodes.clear();
+
+    if (filteredDomains.length === 0 && allDomains.length > 0) {
+      showTableMessage('🔍', 'No Matching Domains', `No domains matched "${query}". Try a different filter term.`);
+      if (viewport) viewport.style.height = '0px';
+      return;
+    }
+
+    hideTableMessage();
 
     if (viewport) {
       viewport.style.height = (filteredDomains.length * ROW_HEIGHT) + 'px';
@@ -435,7 +520,7 @@ const AnalyticsApp = (() => {
     domainText.addEventListener('click', (e) => {
       e.stopPropagation();
       copyTextToClipboard(item.domain, `Copied domain: ${item.domain}`);
-      if (typeof CopiedMemory !== 'undefined') {
+      if (typeof CopiedMemory !== 'undefined' && CopiedMemory.add) {
         CopiedMemory.add(item.domain);
       }
     });
@@ -507,46 +592,52 @@ const AnalyticsApp = (() => {
    */
   function openInExplorer(domain) {
     switchView('explorer');
-    const searchInput = document.getElementById('searchQuery');
+    const searchInput = document.getElementById('searchInput');
     if (searchInput) {
       searchInput.value = domain;
       searchInput.focus();
-      // Trigger search if app Search module available
-      if (typeof SearchApp !== 'undefined' && SearchApp.triggerSearch) {
-        SearchApp.triggerSearch();
-      } else {
-        const searchForm = document.getElementById('searchForm');
-        if (searchForm) searchForm.dispatchEvent(new Event('submit', { cancelable: true }));
-      }
+      const searchActionBtn = document.getElementById('searchActionBtn');
+      if (searchActionBtn) searchActionBtn.click();
     }
   }
 
   /**
-   * Copy all filtered domains as TSV / text
+   * Copy current domain list to clipboard as TSV
    */
   function copyListToClipboard() {
-    if (filteredDomains.length === 0) return;
-    const text = filteredDomains.map(d => `${d.domain}\t${d.count}`).join('\n');
-    copyTextToClipboard(text, `Copied ${filteredDomains.length.toLocaleString()} domains to clipboard`);
+    const list = filteredDomains.length > 0 ? filteredDomains : allDomains;
+    if (list.length === 0) {
+      if (typeof showToast === 'function') showToast('No domains to copy', 'info');
+      return;
+    }
+
+    const tsv = list.map(item => `${item.domain}\t${item.count}`).join('\n');
+    copyTextToClipboard(tsv, `Copied ${list.length.toLocaleString()} domains to clipboard`);
   }
 
   /**
-   * Export all filtered domains as a .txt file
+   * Export domain list as text file
    */
   function exportListToFile() {
-    if (filteredDomains.length === 0) return;
-    const text = filteredDomains.map(d => `${d.domain}: ${d.count}`).join('\n');
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const list = filteredDomains.length > 0 ? filteredDomains : allDomains;
+    if (list.length === 0) {
+      if (typeof showToast === 'function') showToast('No domains to export', 'info');
+      return;
+    }
+
+    const content = list.map(item => `${item.domain}: ${item.count}`).join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `domain_analytics_${filteredDomains.length}_domains.txt`;
+    a.download = `domains_analytics_${Date.now()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
     if (typeof showToast === 'function') {
-      showToast(`Exported ${filteredDomains.length.toLocaleString()} domains to file`, 'success');
+      showToast(`Exported ${list.length.toLocaleString()} domains`, 'success');
     }
   }
 
@@ -584,6 +675,11 @@ const AnalyticsApp = (() => {
   };
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
+// Immediate or DOM ready initialization
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    AnalyticsApp.init();
+  });
+} else {
   AnalyticsApp.init();
-});
+}

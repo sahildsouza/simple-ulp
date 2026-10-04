@@ -53,6 +53,9 @@
   // ─── Initialize ──────────────────────────────
 
   ResultsRenderer.init(resultsScroll, resultsViewport);
+  if (typeof AnalyticsApp !== 'undefined' && AnalyticsApp.init) {
+    AnalyticsApp.init();
+  }
 
   FileManager.init((files) => {
     selectedFiles = files;

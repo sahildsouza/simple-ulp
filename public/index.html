@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=5">
+  <link rel="stylesheet" href="/css/style.css?v=9">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -236,60 +236,29 @@
             </div>
           </div>
           <div class="analytics-bar-right">
-            <button class="btn btn-primary btn-run-analytics" id="btnRunAnalytics">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
-              </svg>
-              <span>Run Analytics</span>
-            </button>
-            <button class="btn btn-secondary btn-cancel-analytics" id="btnCancelAnalytics" style="display: none;">
-              <span>Cancel</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Live Progress Banner -->
-        <div class="analytics-progress-card" id="analyticsProgressCard" style="display: none;">
-          <div class="analytics-progress-spinner"></div>
-          <div class="analytics-progress-info">
-            <div class="analytics-progress-text" id="analyticsProgressText">Analyzing logs…</div>
-            <div class="analytics-progress-sub" id="analyticsProgressSub">0 lines processed</div>
-          </div>
-        </div>
-
-        <!-- Empty state before run -->
-        <div class="analytics-empty-state" id="analyticsEmptyState">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-            <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <h3>Log Domain Analytics</h3>
-          <p>Select one or more log files from the sidebar and click <strong>Run Analytics</strong> to list all domains sorted by frequency count.</p>
-        </div>
-
-        <!-- Results Toolbar & Summary -->
-        <div class="analytics-results-header" id="analyticsResultsHeader" style="display: none;">
-          <div class="analytics-summary">
-            <span class="analytics-summary-item" id="summaryTotalDomains"><strong>0</strong> unique domains</span>
-            <span class="analytics-summary-dot">•</span>
-            <span class="analytics-summary-item" id="summaryTotalLines"><strong>0</strong> total lines</span>
-            <span class="analytics-summary-dot">•</span>
-            <span class="analytics-summary-item" id="summaryElapsed">0s</span>
-          </div>
-          <div class="analytics-actions">
             <div class="analytics-filter-wrap">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="analytics-search-icon">
                 <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
                 <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
-              <input type="text" id="analyticsFilterInput" class="analytics-filter-input" placeholder="Filter domains (e.g. google, proton)…" autocomplete="off" spellcheck="false">
+              <input type="text" id="analyticsFilterInput" class="analytics-filter-input" placeholder="Filter domains…" autocomplete="off" spellcheck="false">
               <button class="btn-clear-filter" id="btnClearAnalyticsFilter" style="display: none;">✕</button>
             </div>
+            <button class="btn btn-primary btn-run-analytics" id="btnRunAnalytics">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" id="analyticsRunIcon">
+                <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+              </svg>
+              <span id="btnRunAnalyticsText">Analyze</span>
+            </button>
+            <button class="btn btn-secondary btn-cancel-analytics" id="btnCancelAnalytics" style="display: none;">
+              <span>Stop</span>
+            </button>
             <button class="btn btn-sm btn-secondary" id="btnCopyAnalyticsList" title="Copy all domains and counts to clipboard">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                 <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
               </svg>
-              <span>Copy List</span>
+              <span>Copy</span>
             </button>
             <button class="btn btn-sm btn-secondary" id="btnExportAnalyticsList" title="Download domains list as TXT file">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -300,14 +269,36 @@
           </div>
         </div>
 
-        <!-- Virtual Scroll Domain List Container -->
-        <div class="analytics-scroll" id="analyticsScroll" style="display: none;">
+        <!-- Live Progress / Summary Bar -->
+        <div class="analytics-status-bar" id="analyticsStatusBar">
+          <div class="analytics-status-left">
+            <span class="analytics-status-text" id="analyticsStatusText">Ready</span>
+          </div>
+          <div class="analytics-summary" id="analyticsSummary" style="display: none;">
+            <span class="analytics-summary-item" id="summaryTotalDomains"><strong>0</strong> unique domains</span>
+            <span class="analytics-summary-dot">•</span>
+            <span class="analytics-summary-item" id="summaryTotalLines"><strong>0</strong> total lines</span>
+            <span class="analytics-summary-dot">•</span>
+            <span class="analytics-summary-item" id="summaryElapsed">0s</span>
+          </div>
+        </div>
+
+        <!-- Domain Table Container (Always Visible) -->
+        <div class="analytics-scroll" id="analyticsScroll">
           <div class="analytics-table-header">
             <div class="col-rank">#</div>
             <div class="col-domain">Domain</div>
             <div class="col-count">Count</div>
             <div class="col-actions">Actions</div>
           </div>
+          <!-- Message inside table when empty or loading -->
+          <div class="analytics-table-message" id="analyticsTableMessage">
+            <div class="analytics-msg-icon" id="analyticsMsgIcon">📁</div>
+            <div class="analytics-msg-title" id="analyticsMsgTitle">Select Log Files to Analyze</div>
+            <div class="analytics-msg-desc" id="analyticsMsgDesc">Select one or more log files from the left sidebar to list all domains sorted by frequency.</div>
+            <button class="btn btn-primary btn-sm" id="btnTriggerRunInside" style="display:none; margin-top:12px;">Run Analytics Now</button>
+          </div>
+          <!-- Virtual Scroll Viewport for Domain Rows -->
           <div class="analytics-viewport" id="analyticsViewport"></div>
         </div>
       </div>
@@ -320,11 +311,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=8"></script>
-  <script src="/js/search.js?v=8"></script>
-  <script src="/js/results.js?v=8"></script>
-  <script src="/js/analytics.js?v=8"></script>
-  <script src="/js/files.js?v=8"></script>
-  <script src="/js/app.js?v=8"></script>
+  <script src="/js/memory.js?v=9"></script>
+  <script src="/js/search.js?v=9"></script>
+  <script src="/js/results.js?v=9"></script>
+  <script src="/js/analytics.js?v=9"></script>
+  <script src="/js/files.js?v=9"></script>
+  <script src="/js/app.js?v=9"></script>
 </body>
 </html>
