@@ -58,6 +58,14 @@ const AnalyticsApp = (() => {
       btnInside.addEventListener('click', () => startAnalytics());
     }
 
+    const btnSelectFiles = document.getElementById('btnSelectFilesInside');
+    if (btnSelectFiles) {
+      btnSelectFiles.addEventListener('click', () => {
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        if (sidebarToggle) sidebarToggle.click();
+      });
+    }
+
     // Filter input
     const filterInput = document.getElementById('analyticsFilterInput');
     const btnClearFilter = document.getElementById('btnClearAnalyticsFilter');
@@ -137,7 +145,7 @@ const AnalyticsApp = (() => {
 
       const files = getSelectedFiles();
       if (files.length === 0) {
-        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.');
+        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.', false, true);
       } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
         // Already have analyzed results for this exact file selection
         hideTableMessage();
@@ -145,7 +153,7 @@ const AnalyticsApp = (() => {
       } else {
         // Files are selected, but DO NOT auto-scan: offer the option to run with live progress bar
         const filesDesc = files.length === 1 ? files[0] : `${files.length} log files`;
-        showTableMessage('📊', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true);
+        showTableMessage('📊', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
       }
     } else {
       if (navAnalytics) navAnalytics.classList.remove('active');
@@ -189,21 +197,22 @@ const AnalyticsApp = (() => {
         visibleNodes.forEach(node => node.remove());
         visibleNodes.clear();
         if (viewport) viewport.style.height = '0px';
-        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.');
+        showTableMessage('📁', 'No Log Files Selected', 'Select one or more log files from the left sidebar to analyze domains.', false, true);
       } else if (!filesEqual(selected, lastAnalyzedFiles)) {
         // Files changed: prompt user to run analytics (DO NOT auto-scan)
         const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
-        showTableMessage('📊', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true);
+        showTableMessage('📊', 'Selection Changed', `Selected: ${desc}. Click "Run Analytics" below or in toolbar to analyze domains.`, true, false);
       }
     }
   }
 
-  function showTableMessage(icon, title, desc, showRunBtn = false) {
+  function showTableMessage(icon, title, desc, showRunBtn = false, showFilesBtn = false) {
     const msgEl = document.getElementById('analyticsTableMessage');
     const iconEl = document.getElementById('analyticsMsgIcon');
     const titleEl = document.getElementById('analyticsMsgTitle');
     const descEl = document.getElementById('analyticsMsgDesc');
     const btnInside = document.getElementById('btnTriggerRunInside');
+    const btnSelectFiles = document.getElementById('btnSelectFilesInside');
 
     if (!msgEl) return;
     if (iconEl) iconEl.textContent = icon;
@@ -212,6 +221,9 @@ const AnalyticsApp = (() => {
     if (btnInside) {
       btnInside.style.display = showRunBtn ? 'inline-flex' : 'none';
       btnInside.textContent = 'Run Analytics Now';
+    }
+    if (btnSelectFiles) {
+      btnSelectFiles.style.display = showFilesBtn ? 'inline-flex' : 'none';
     }
 
     msgEl.style.display = 'flex';

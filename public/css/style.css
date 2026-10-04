@@ -1358,12 +1358,50 @@ a {
 
     .analytics-bar-left, .analytics-bar-right {
       width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sp-2);
       justify-content: space-between;
     }
 
     .analytics-filter-wrap {
       flex: 1;
+      min-width: 140px;
       width: auto;
+    }
+
+    .analytics-table-header {
+      padding: 0 var(--sp-2);
+    }
+
+    .analytics-row {
+      padding: 0 var(--sp-2);
+    }
+
+    .col-rank {
+      width: 32px;
+      font-size: 11px;
+    }
+
+    .col-domain {
+      padding-right: var(--sp-2);
+    }
+
+    .analytics-domain-text {
+      font-size: var(--text-xs);
+    }
+
+    .col-count {
+      width: 75px;
+    }
+
+    .col-actions {
+      width: 48px;
+    }
+
+    .analytics-count-bar {
+      display: none;
     }
   }
 

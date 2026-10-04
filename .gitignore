@@ -4,3 +4,5 @@ log.txt
 logs/
 .DS_Store
 Thumbs.db
+.temp-chrome/
+test ulp.txt

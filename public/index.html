@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=10">
+  <link rel="stylesheet" href="/css/style.css?v=11">
 </head>
 <body>
   <!-- ─── Header ──────────────────────────────── -->
@@ -216,7 +216,8 @@
           <div class="results-viewport" id="resultsViewport"></div>
         </div>
       </div>
-      <!-- ─── End Explorer View ────────────── -->
+    </div>
+    <!-- ─── End Explorer View ────────────── -->
 
       <!-- ─── Analytics View ──────────────── -->
       <div id="analyticsView" class="analytics-view" style="display: none;">
@@ -320,6 +321,7 @@
             <div class="analytics-msg-icon" id="analyticsMsgIcon">📁</div>
             <div class="analytics-msg-title" id="analyticsMsgTitle">Select Log Files to Analyze</div>
             <div class="analytics-msg-desc" id="analyticsMsgDesc">Select one or more log files from the left sidebar to list all domains sorted by frequency.</div>
+            <button class="btn btn-secondary btn-sm" id="btnSelectFilesInside" style="display:none; margin-top:12px;">Choose Files</button>
             <button class="btn btn-primary btn-sm" id="btnTriggerRunInside" style="display:none; margin-top:12px;">Run Analytics Now</button>
           </div>
           <!-- Virtual Scroll Viewport for Domain Rows -->
@@ -335,11 +337,11 @@
   <!-- ─── Toast notifications ─────────────── -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/memory.js?v=10"></script>
-  <script src="/js/search.js?v=10"></script>
-  <script src="/js/results.js?v=10"></script>
-  <script src="/js/analytics.js?v=10"></script>
-  <script src="/js/files.js?v=10"></script>
-  <script src="/js/app.js?v=10"></script>
+  <script src="/js/memory.js?v=11"></script>
+  <script src="/js/search.js?v=11"></script>
+  <script src="/js/results.js?v=11"></script>
+  <script src="/js/analytics.js?v=11"></script>
+  <script src="/js/files.js?v=11"></script>
+  <script src="/js/app.js?v=11"></script>
 </body>
 </html>
