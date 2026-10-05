@@ -30,6 +30,10 @@
   const toggleCase = document.getElementById('toggleCase');
   const toggleInvert = document.getElementById('toggleInvert');
   const toggleDedupe = document.getElementById('toggleDedupe');
+  const toggleInResults = document.getElementById('toggleInResults');
+  const searchBar = document.querySelector('.search-bar');
+  let isInResultsMode = false;
+  let inResultsDebounceTimer = null;
   const fieldFilter = document.getElementById('fieldFilter');
   const statsText = document.getElementById('statsText');
   const emptyState = document.getElementById('emptyState');
@@ -105,16 +109,104 @@
     const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode)
       ? ResultsRenderer.getDedupeMode()
       : false;
-    const hasActiveFilters = searchMode !== 'literal' || caseSensitive || invertMatch || !!fieldFilter.value || isDedupe;
+    const hasActiveFilters = searchMode !== 'literal' || caseSensitive || invertMatch || !!fieldFilter.value || isDedupe || isInResultsMode;
 
     filterActiveDot.style.display = hasActiveFilters ? 'inline-block' : 'none';
     filterToggleBtn.classList.toggle('has-active-filters', hasActiveFilters);
+  }
+
+  function updateSearchPlaceholder() {
+    if (isInResultsMode) {
+      const total = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getAllResultsCount)
+        ? ResultsRenderer.getAllResultsCount()
+        : (ResultsRenderer.getResults().length || 0);
+      searchInput.placeholder = `Search within ${formatNumber(total)} results… (Alt+R to exit)`;
+      return;
+    }
+    if (fieldFilter.value === 'url') {
+      searchInput.placeholder = 'Search URLs only… e.g. netflix.com, /login (Enter or click Search)';
+    } else if (fieldFilter.value === 'username') {
+      searchInput.placeholder = 'Search usernames only… (Enter or click Search)';
+    } else if (fieldFilter.value === 'password') {
+      searchInput.placeholder = 'Search passwords only… (Enter or click Search)';
+    } else {
+      searchInput.placeholder = 'Search logs… (Enter or click Search)';
+    }
+  }
+
+  function applyInResultsFilter() {
+    if (!isInResultsMode) return;
+    const query = searchInput.value;
+    ResultsRenderer.setInResultsFilter({
+      query,
+      mode: searchMode,
+      caseSensitive,
+      invertMatch,
+      fieldFilter: fieldFilter.value || ''
+    });
+    updateStatsText();
+  }
+
+  function debounceInResultsFilter() {
+    if (inResultsDebounceTimer) clearTimeout(inResultsDebounceTimer);
+    inResultsDebounceTimer = setTimeout(() => {
+      applyInResultsFilter();
+    }, 120);
+  }
+
+  function setInResultsMode(active) {
+    const totalResults = ResultsRenderer.getResults().length;
+    if (active && totalResults === 0) {
+      showToast('No search results loaded to filter within', 'info');
+      return;
+    }
+
+    isInResultsMode = Boolean(active);
+
+    if (toggleInResults) {
+      toggleInResults.classList.toggle('active', isInResultsMode);
+      toggleInResults.setAttribute('aria-pressed', isInResultsMode ? 'true' : 'false');
+    }
+    if (searchBar) {
+      searchBar.classList.toggle('is-in-results-active', isInResultsMode);
+    }
+
+    if (isInResultsMode) {
+      updateSearchPlaceholder();
+      if (searchBtnText) searchBtnText.textContent = 'Filter';
+      if (searchActionBtn) {
+        searchActionBtn.title = 'Filter results (Enter)';
+        searchActionBtn.setAttribute('aria-label', 'Filter results');
+      }
+      searchInput.focus();
+      searchInput.select();
+      updateFilterBadge();
+      applyInResultsFilter();
+      showToast(`Filter within ${formatNumber(totalResults)} results enabled`, 'info');
+    } else {
+      ResultsRenderer.clearInResultsFilter();
+      updateSearchPlaceholder();
+      if (searchBtnText) searchBtnText.textContent = 'Search';
+      if (searchActionBtn) {
+        searchActionBtn.title = 'Search (Enter)';
+        searchActionBtn.setAttribute('aria-label', 'Search');
+      }
+      updateFilterBadge();
+      updateStatsText();
+      showToast('Search within results disabled', 'info');
+    }
   }
 
   if (filterToggleBtn) {
     filterToggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleSearchOptions();
+    });
+  }
+
+  if (toggleInResults) {
+    toggleInResults.addEventListener('click', () => {
+      setInResultsMode(!isInResultsMode);
     });
   }
 
@@ -128,7 +220,11 @@
       btn.classList.add('active');
       searchMode = btn.dataset.mode;
       updateFilterBadge();
-      triggerSearch();
+      if (isInResultsMode) {
+        applyInResultsFilter();
+      } else {
+        triggerSearch();
+      }
     });
   });
 
@@ -136,14 +232,22 @@
     caseSensitive = !caseSensitive;
     toggleCase.classList.toggle('active', caseSensitive);
     updateFilterBadge();
-    triggerSearch();
+    if (isInResultsMode) {
+      applyInResultsFilter();
+    } else {
+      triggerSearch();
+    }
   });
 
   toggleInvert.addEventListener('click', () => {
     invertMatch = !invertMatch;
     toggleInvert.classList.toggle('active', invertMatch);
     updateFilterBadge();
-    triggerSearch();
+    if (isInResultsMode) {
+      applyInResultsFilter();
+    } else {
+      triggerSearch();
+    }
   });
 
   if (toggleDedupe) {
@@ -161,14 +265,9 @@
 
   fieldFilter.addEventListener('change', () => {
     updateFilterBadge();
-    if (fieldFilter.value === 'url') {
-      searchInput.placeholder = 'Search URLs only… e.g. netflix.com, /login (Enter or click Search)';
-    } else if (fieldFilter.value === 'username') {
-      searchInput.placeholder = 'Search usernames only… (Enter or click Search)';
-    } else if (fieldFilter.value === 'password') {
-      searchInput.placeholder = 'Search passwords only… (Enter or click Search)';
-    } else {
-      searchInput.placeholder = 'Search logs… (Enter or click Search)';
+    updateSearchPlaceholder();
+    if (isInResultsMode) {
+      applyInResultsFilter();
     }
   });
 
@@ -224,9 +323,12 @@
     });
   }
 
-  // Only toggle clear button visibility on input — do not search automatically
+  // Only toggle clear button visibility on input — debounce in-results filtering if active
   searchInput.addEventListener('input', () => {
     clearBtn.classList.toggle('visible', searchInput.value.length > 0);
+    if (isInResultsMode) {
+      debounceInResultsFilter();
+    }
   });
 
   searchInput.addEventListener('keydown', (e) => {
@@ -242,8 +344,13 @@
   clearBtn.addEventListener('click', () => {
     searchInput.value = '';
     clearBtn.classList.remove('visible');
-    clearSearch();
-    searchInput.focus();
+    if (isInResultsMode) {
+      applyInResultsFilter();
+      searchInput.focus();
+    } else {
+      clearSearch();
+      searchInput.focus();
+    }
   });
 
   // ─── Keyboard Shortcuts ──────────────────────
@@ -270,6 +377,14 @@
         stopSearch();
       } else if (sidebar.classList.contains('open')) {
         closeSidebar();
+      } else if (isInResultsMode) {
+        if (searchInput.value) {
+          searchInput.value = '';
+          clearBtn.classList.remove('visible');
+          applyInResultsFilter();
+        } else {
+          setInResultsMode(false);
+        }
       } else if (searchInput.value) {
         searchInput.value = '';
         clearBtn.classList.remove('visible');
@@ -300,6 +415,16 @@
     if (e.altKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
       toggleSearchOptions();
+    }
+
+    // Alt+R — toggle search within loaded results
+    if (e.altKey && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault();
+      if (toggleInResults && !toggleInResults.disabled) {
+        setInResultsMode(!isInResultsMode);
+      } else {
+        showToast('No search results loaded to filter within', 'info');
+      }
     }
   });
 
@@ -483,6 +608,7 @@
     renderFileBreakdown();
 
     if (totalRaw > 0) {
+      if (toggleInResults) toggleInResults.disabled = false;
       const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode) ? ResultsRenderer.getDedupeMode() : false;
       const dedupeTag = isDedupe ? ` <span class="stats-dedupe-tag">Unique</span>` : '';
       statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> ${label}${dedupeTag}${filterSuffix} <span class="stats-time" style="color: var(--warning);">(stopped)</span> (${formatNumber(totalRaw)} total RAW)`;
@@ -498,6 +624,15 @@
   function triggerSearch() {
     const query = searchInput.value.trim();
 
+    if (isInResultsMode) {
+      if (inResultsDebounceTimer) {
+        clearTimeout(inResultsDebounceTimer);
+        inResultsDebounceTimer = null;
+      }
+      applyInResultsFilter();
+      return;
+    }
+
     if (!query) {
       clearSearch();
       return;
@@ -512,6 +647,15 @@
   }
 
   async function executeSearch(query) {
+    if (toggleInResults) {
+      toggleInResults.disabled = true;
+      toggleInResults.classList.remove('active');
+      toggleInResults.setAttribute('aria-pressed', 'false');
+    }
+    if (isInResultsMode) {
+      isInResultsMode = false;
+      if (searchBar) searchBar.classList.remove('is-in-results-active');
+    }
     showState('loading');
     setSearchBtnState(true);
     showSearchProgress(selectedFiles.length);
@@ -544,6 +688,7 @@
         if (matchCount === 1) {
           showState('results');
           requestAnimationFrame(() => ResultsRenderer.renderVisible());
+          if (toggleInResults) toggleInResults.disabled = false;
         }
         ResultsRenderer.appendResult(match);
 
@@ -558,6 +703,9 @@
       (stats) => {
         setSearchBtnState(false);
         completeSearchProgress(stats);
+        if (stats.matches > 0 && toggleInResults) {
+          toggleInResults.disabled = false;
+        }
         const viewMode = ResultsRenderer.getViewMode();
         const activeCount = ResultsRenderer.getFilteredResults().length;
         const activeFilter = ResultsRenderer.getActiveFileFilter();
@@ -604,6 +752,13 @@
     const filterSuffix = activeFilter ? ` in ${activeFilter}` : '';
     const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode) ? ResultsRenderer.getDedupeMode() : false;
     const dedupeTag = isDedupe ? ` <span class="stats-dedupe-tag">Unique</span>` : '';
+    const inFilter = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getInResultsFilter) ? ResultsRenderer.getInResultsFilter() : null;
+
+    if (inFilter && inFilter.query && inFilter.query.trim().length > 0) {
+      const modeLabel = viewMode === 'raw' ? 'results' : `${viewMode}:pass matches`;
+      statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> filtered ${modeLabel}${dedupeTag}${filterSuffix} <span class="stats-time" style="color: var(--accent);">(in results)</span> (of ${formatNumber(totalRaw)} loaded)`;
+      return;
+    }
 
     if (viewMode === 'raw') {
       statsText.innerHTML = `<strong>${formatNumber(activeCount)}</strong> RAW results${dedupeTag}${filterSuffix}${activeFilter ? ` (of ${formatNumber(totalRaw)} total)` : ''}`;
@@ -767,6 +922,16 @@
     setSearchBtnState(false);
     hideSearchProgress();
     matchCount = 0;
+    if (isInResultsMode) {
+      isInResultsMode = false;
+      if (searchBar) searchBar.classList.remove('is-in-results-active');
+    }
+    if (toggleInResults) {
+      toggleInResults.disabled = true;
+      toggleInResults.classList.remove('active');
+      toggleInResults.setAttribute('aria-pressed', 'false');
+    }
+    updateSearchPlaceholder();
     ResultsRenderer.clear();
     if (fileBreakdownBar) fileBreakdownBar.style.display = 'none';
     closeFileBreakdown();

@@ -22,6 +22,7 @@ const ResultsRenderer = (() => {
   let activeFileFilter = null;
   let isDedupeActive = false;
   let streamingDedupeSeen = new Set();
+  let inResultsFilter = null;
 
   // Counts for each mode
   let counts = { raw: 0, email: 0, username: 0, phone: 0 };
@@ -115,12 +116,155 @@ const ResultsRenderer = (() => {
   }
 
   /**
-   * Filter allResults into filteredResults based on currentViewMode
+   * Escape special regex characters
+   */
+  function escapeRegex(str) {
+    if (!str) return '';
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Compute submatch ranges for highlighting
+   */
+  function computeFieldHighlights(text, q, mode, cs) {
+    if (!text || !q) return [];
+    const submatches = [];
+    if (mode === 'literal') {
+      const hay = cs ? text : text.toLowerCase();
+      const needle = cs ? q : q.toLowerCase();
+      if (!needle) return [];
+      let idx = hay.indexOf(needle);
+      while (idx !== -1) {
+        submatches.push({
+          start: idx,
+          end: idx + needle.length,
+          text: text.substring(idx, idx + needle.length)
+        });
+        idx = hay.indexOf(needle, idx + needle.length);
+      }
+    } else {
+      try {
+        const re = (mode === 'word')
+          ? new RegExp('\\b' + escapeRegex(q) + '\\b', cs ? 'g' : 'gi')
+          : new RegExp(q, cs ? 'g' : 'gi');
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          submatches.push({
+            start: m.index,
+            end: m.index + m[0].length,
+            text: m[0]
+          });
+          if (m.index === re.lastIndex) re.lastIndex++;
+        }
+      } catch (_) {}
+    }
+    return submatches;
+  }
+
+  /**
+   * Filter allResults into filteredResults based on activeFileFilter, inResultsFilter, currentViewMode, and isDedupeActive
    */
   function applyFilter() {
     let base = allResults;
     if (activeFileFilter) {
       base = base.filter(r => r.file === activeFileFilter);
+    }
+
+    // In-results search filter
+    if (inResultsFilter && inResultsFilter.query && inResultsFilter.query.trim().length > 0) {
+      const q = inResultsFilter.query.trim();
+      const mode = inResultsFilter.mode || 'literal';
+      const cs = Boolean(inResultsFilter.caseSensitive);
+      const invert = Boolean(inResultsFilter.invertMatch);
+      const field = inResultsFilter.fieldFilter || '';
+
+      let regexMatcher = null;
+      let regexValid = true;
+      if (mode === 'regex') {
+        try {
+          regexMatcher = new RegExp(q, cs ? 'g' : 'gi');
+        } catch (e) {
+          regexValid = false;
+        }
+      } else if (mode === 'word') {
+        try {
+          regexMatcher = new RegExp('\\b' + escapeRegex(q) + '\\b', cs ? 'g' : 'gi');
+        } catch (e) {
+          regexValid = false;
+        }
+      }
+
+      base = base.filter(r => {
+        let targetText = '';
+        if (field === 'url') {
+          targetText = r.url || '';
+        } else if (field === 'username') {
+          targetText = r.user || '';
+        } else if (field === 'password') {
+          targetText = r.pass || '';
+        } else {
+          targetText = r.content || '';
+        }
+
+        let isMatch = false;
+        let submatches = [];
+
+        if (mode === 'literal' || !regexValid) {
+          const hay = cs ? targetText : targetText.toLowerCase();
+          const needle = cs ? q : q.toLowerCase();
+          if (needle.length > 0) {
+            let idx = hay.indexOf(needle);
+            if (idx !== -1) {
+              isMatch = true;
+              while (idx !== -1) {
+                submatches.push({
+                  start: idx,
+                  end: idx + needle.length,
+                  text: targetText.substring(idx, idx + needle.length)
+                });
+                idx = hay.indexOf(needle, idx + needle.length);
+              }
+            }
+          }
+        } else if (regexMatcher) {
+          regexMatcher.lastIndex = 0;
+          let m;
+          while ((m = regexMatcher.exec(targetText)) !== null) {
+            isMatch = true;
+            submatches.push({
+              start: m.index,
+              end: m.index + m[0].length,
+              text: m[0]
+            });
+            if (m.index === regexMatcher.lastIndex) regexMatcher.lastIndex++;
+          }
+        }
+
+        const finalMatch = invert ? !isMatch : isMatch;
+        if (finalMatch) {
+          if (!invert) {
+            if (field === '' || !field) {
+              r.dynamicSubmatches = submatches;
+            } else {
+              r.dynamicSubmatches = computeFieldHighlights(r.content || '', q, mode, cs);
+            }
+            r.dynamicUserMatches = computeFieldHighlights(r.user || '', q, mode, cs);
+            r.dynamicPassMatches = computeFieldHighlights(r.pass || '', q, mode, cs);
+          } else {
+            r.dynamicSubmatches = [];
+            r.dynamicUserMatches = [];
+            r.dynamicPassMatches = [];
+          }
+          return true;
+        }
+        return false;
+      });
+    } else {
+      for (let i = 0; i < base.length; i++) {
+        delete base[i].dynamicSubmatches;
+        delete base[i].dynamicUserMatches;
+        delete base[i].dynamicPassMatches;
+      }
     }
 
     if (currentViewMode === 'raw') {
@@ -506,6 +650,7 @@ const ResultsRenderer = (() => {
    */
   function clear() {
     closeRawDropdown();
+    inResultsFilter = null;
     allResults = [];
     filteredResults = [];
     fileMatchCounts = {};
@@ -638,8 +783,12 @@ const ResultsRenderer = (() => {
     const content = document.createElement('div');
     content.className = 'result-content';
 
-    if (result.submatches && result.submatches.length > 0) {
-      content.innerHTML = highlightMatches(result.content, result.submatches);
+    const activeSubmatches = (result.dynamicSubmatches !== undefined)
+      ? result.dynamicSubmatches
+      : result.submatches;
+
+    if (activeSubmatches && activeSubmatches.length > 0) {
+      content.innerHTML = highlightMatches(result.content, activeSubmatches);
     } else {
       content.textContent = result.content;
     }
@@ -758,7 +907,10 @@ const ResultsRenderer = (() => {
       iconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>';
     }
 
-    identityPill.innerHTML = `<span class="cred-icon-wrap">${iconSvg}</span> <span class="cred-text">${escapeHtml(result.user || '—')}</span>`;
+    const userTextHtml = (result.dynamicUserMatches && result.dynamicUserMatches.length > 0)
+      ? highlightMatches(result.user || '—', result.dynamicUserMatches)
+      : escapeHtml(result.user || '—');
+    identityPill.innerHTML = `<span class="cred-icon-wrap">${iconSvg}</span> <span class="cred-text">${userTextHtml}</span>`;
     identityPill.title = `Click to copy ${typeName}: ${result.user || '—'}`;
 
     // Click on identity -> copies identity only
@@ -783,7 +935,10 @@ const ResultsRenderer = (() => {
     if (isPassCopied) passPill.classList.add('is-copied');
 
     const passIconSvg = '<svg class="cred-icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
-    passPill.innerHTML = `<span class="cred-icon-wrap">${passIconSvg}</span> <span class="cred-text">${escapeHtml(result.pass || '—')}</span>`;
+    const passTextHtml = (result.dynamicPassMatches && result.dynamicPassMatches.length > 0)
+      ? highlightMatches(result.pass || '—', result.dynamicPassMatches)
+      : escapeHtml(result.pass || '—');
+    passPill.innerHTML = `<span class="cred-icon-wrap">${passIconSvg}</span> <span class="cred-text">${passTextHtml}</span>`;
     passPill.title = `Click to copy password: ${result.pass || '—'}`;
 
     // Click on pass -> copies password only
@@ -844,7 +999,14 @@ const ResultsRenderer = (() => {
 
       const body = document.createElement('div');
       body.className = 'raw-dropdown-body';
-      body.textContent = result.content;
+      const dropdownSubmatches = (result.dynamicSubmatches !== undefined)
+        ? result.dynamicSubmatches
+        : result.submatches;
+      if (dropdownSubmatches && dropdownSubmatches.length > 0) {
+        body.innerHTML = highlightMatches(result.content, dropdownSubmatches);
+      } else {
+        body.textContent = result.content;
+      }
 
       dropdown.appendChild(body);
 
@@ -965,6 +1127,17 @@ const ResultsRenderer = (() => {
       isDedupeActive = !isDedupeActive;
       applyFilter();
       return isDedupeActive;
-    }
+    },
+    setInResultsFilter: (filter) => {
+      inResultsFilter = filter ? { ...filter } : null;
+      applyFilter();
+    },
+    clearInResultsFilter: () => {
+      inResultsFilter = null;
+      applyFilter();
+    },
+    getInResultsFilter: () => (inResultsFilter ? { ...inResultsFilter } : null),
+    getAllResultsCount: () => allResults.length,
+    getFilteredResultsCount: () => filteredResults.length
   };
 })();
