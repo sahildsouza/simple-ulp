@@ -857,22 +857,6 @@ const ResultsRenderer = (() => {
 
     actions.appendChild(eyeBtn);
 
-    // URL tag if available
-    if (result.url) {
-      const urlTag = document.createElement('span');
-      urlTag.className = 'cred-url-tag';
-      urlTag.textContent = result.url;
-      urlTag.title = `Source URL: ${result.url} (click to copy URL)`;
-      urlTag.addEventListener('click', (e) => {
-        e.stopPropagation();
-        copyToClipboard(result.url, 'url');
-        if (typeof CopiedMemory !== 'undefined') {
-          CopiedMemory.add(result.url);
-        }
-      });
-      actions.appendChild(urlTag);
-    }
-
     row.appendChild(pillsWrapper);
     row.appendChild(actions);
 
