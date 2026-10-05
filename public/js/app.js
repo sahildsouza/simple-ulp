@@ -495,10 +495,11 @@
       if (fileBreakdownCountBadge) {
         fileBreakdownCountBadge.textContent = `1 of ${fileEntries.length} files`;
       }
+      fileBreakdownBtn.title = `Filtered by: ${activeFilter} (${formatNumber(activeCount)} matches). Click to change or clear filter.`;
     } else {
       fileBreakdownBtn.classList.remove('is-filtered');
       const labelEl = fileBreakdownBtn.querySelector('.file-breakdown-label');
-      if (labelEl) labelEl.textContent = 'Results by file:';
+      if (labelEl) labelEl.textContent = 'Files:';
 
       let summaryText = '';
       if (fileEntries.length === 1) {
@@ -514,6 +515,7 @@
       if (fileBreakdownCountBadge) {
         fileBreakdownCountBadge.textContent = `${fileEntries.length} ${fileEntries.length === 1 ? 'file' : 'files'}`;
       }
+      fileBreakdownBtn.title = `Results found across ${fileEntries.length} log files (${formatNumber(totalMatches)} matches). Click to view breakdown / filter.`;
     }
 
     if (fileBreakdownTotalBadge) {

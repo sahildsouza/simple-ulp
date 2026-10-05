@@ -607,15 +607,15 @@ a {
   border-color: var(--border-focus);
 }
 
-/* ─── File Results Breakdown Bar (Above Result Modes) ─── */
+/* ─── File Results Breakdown Bar (Compact beside Number:pass on desktop) ─── */
 
 .file-breakdown-bar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 6px var(--sp-4);
-  min-height: 38px;
+  background: transparent;
+  border-bottom: none;
+  padding: 0;
+  min-height: unset;
   position: relative;
   z-index: 15;
 }
@@ -623,25 +623,27 @@ a {
 .file-breakdown-dropdown-wrap {
   position: relative;
   display: inline-flex;
-  width: 100%;
+  width: auto;
 }
 
 .file-breakdown-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  max-width: 720px;
+  justify-content: flex-start;
+  width: auto;
+  max-width: 340px;
   background: var(--surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 5px 12px;
+  padding: 3px 8px;
+  height: 28px;
+  box-sizing: border-box;
   font-size: var(--text-xs);
   color: var(--text-primary);
   cursor: pointer;
   transition: all var(--duration-fast);
   user-select: none;
-  gap: var(--sp-3);
+  gap: 6px;
   text-align: left;
 }
 
@@ -663,7 +665,7 @@ a {
 .file-breakdown-trigger-left {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
   overflow: hidden;
 }
@@ -671,6 +673,8 @@ a {
 .file-breakdown-trigger-icon {
   color: var(--text-tertiary);
   flex-shrink: 0;
+  width: 12px;
+  height: 12px;
 }
 
 .file-breakdown-trigger.is-filtered .file-breakdown-trigger-icon {
@@ -681,7 +685,7 @@ a {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
@@ -689,31 +693,37 @@ a {
 
 .file-breakdown-summary {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+/* Compact on desktop: hide long summary list when unfiltered */
+.file-breakdown-trigger:not(.is-filtered) .file-breakdown-summary {
+  display: none;
 }
 
 .file-breakdown-trigger-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 .file-breakdown-count-badge {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--surface-4);
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 .file-breakdown-trigger.is-filtered .file-breakdown-count-badge {
@@ -725,6 +735,8 @@ a {
 .file-breakdown-trigger .dropdown-chevron {
   color: var(--text-tertiary);
   transition: transform var(--duration-fast);
+  width: 10px;
+  height: 10px;
 }
 
 .file-breakdown-trigger[aria-expanded="true"] .dropdown-chevron {
@@ -739,9 +751,9 @@ a {
   top: calc(100% + 5px);
   left: 0;
   z-index: 100;
-  min-width: 340px;
-  max-width: min(540px, calc(100vw - 32px));
-  width: 100%;
+  width: 380px;
+  min-width: 320px;
+  max-width: min(520px, calc(100vw - 32px));
   background: var(--surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -899,16 +911,18 @@ a {
 /* ─── Result Modes Bar ────────────────────────── */
 
 .result-modes-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--surface-1);
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 6px var(--sp-4);
-    gap: var(--sp-3);
-    flex-wrap: wrap;
-    min-height: 40px;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  z-index: 15;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 6px var(--sp-4);
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  min-height: 40px;
+}
 
   .result-modes {
     display: inline-flex;
@@ -1647,11 +1661,27 @@ a {
     }
 
     .file-breakdown-bar {
-      padding: 6px var(--sp-3);
+      width: 100%;
+      order: -1;
+      padding: 0;
+    }
+
+    .file-breakdown-dropdown-wrap {
+      width: 100%;
     }
 
     .file-breakdown-trigger {
+      width: 100%;
       max-width: 100%;
+      height: auto;
+      min-height: 32px;
+      padding: 5px 10px;
+      justify-content: space-between;
+    }
+
+    .file-breakdown-trigger:not(.is-filtered) .file-breakdown-summary {
+      display: inline-block;
+      max-width: 160px;
     }
 
     .file-breakdown-menu {
@@ -1663,7 +1693,10 @@ a {
     }
 
     .result-modes-bar {
+      flex-direction: column;
+      align-items: stretch;
       padding: 6px var(--sp-3);
+      gap: var(--sp-2);
     }
 
     .result-modes {

@@ -143,35 +143,6 @@
         </div>
       </div>
 
-      <!-- ─── File Results Breakdown Bar (Above Result Modes) ─── -->
-      <div class="file-breakdown-bar" id="fileBreakdownBar" style="display: none;">
-        <div class="file-breakdown-dropdown-wrap" id="fileBreakdownDropdownWrap">
-          <button class="file-breakdown-trigger" id="fileBreakdownBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Click to view match counts per log file">
-            <div class="file-breakdown-trigger-left">
-              <svg class="file-breakdown-trigger-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span class="file-breakdown-label">Results by file:</span>
-              <span class="file-breakdown-summary" id="fileBreakdownSummary">0 files</span>
-            </div>
-            <div class="file-breakdown-trigger-right">
-              <span class="file-breakdown-count-badge" id="fileBreakdownCountBadge">0</span>
-              <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-          </button>
-          <div class="file-breakdown-menu" id="fileBreakdownMenu" style="display: none;">
-            <div class="file-breakdown-menu-header">
-              <span class="file-breakdown-menu-title">Log File Results</span>
-              <span class="file-breakdown-total-badge" id="fileBreakdownTotalBadge">0 matches</span>
-            </div>
-            <div class="file-breakdown-list" id="fileBreakdownList"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- ─── Result Modes Toolbar ─────── -->
       <div class="result-modes-bar" id="resultModesBar">
         <div class="result-modes" id="resultModes">
@@ -199,6 +170,35 @@
             </svg>
             <span class="mode-tab-label">Number:pass</span>
           </button>
+        </div>
+
+        <!-- ─── File Results Breakdown Bar (Compact beside Number:pass on desktop) ─── -->
+        <div class="file-breakdown-bar" id="fileBreakdownBar" style="display: none;">
+          <div class="file-breakdown-dropdown-wrap" id="fileBreakdownDropdownWrap">
+            <button class="file-breakdown-trigger" id="fileBreakdownBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Click to view match counts per log file">
+              <div class="file-breakdown-trigger-left">
+                <svg class="file-breakdown-trigger-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="file-breakdown-label">Files:</span>
+                <span class="file-breakdown-summary" id="fileBreakdownSummary">0 files</span>
+              </div>
+              <div class="file-breakdown-trigger-right">
+                <span class="file-breakdown-count-badge" id="fileBreakdownCountBadge">0</span>
+                <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </button>
+            <div class="file-breakdown-menu" id="fileBreakdownMenu" style="display: none;">
+              <div class="file-breakdown-menu-header">
+                <span class="file-breakdown-menu-title">Log File Results</span>
+                <span class="file-breakdown-total-badge" id="fileBreakdownTotalBadge">0 matches</span>
+              </div>
+              <div class="file-breakdown-list" id="fileBreakdownList"></div>
+            </div>
+          </div>
         </div>
       </div>
 
