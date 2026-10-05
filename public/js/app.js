@@ -27,8 +27,6 @@
   const modeLiteral = document.getElementById('modeLiteral');
   const modeRegex = document.getElementById('modeRegex');
   const modeWord = document.getElementById('modeWord');
-  const toggleCase = document.getElementById('toggleCase');
-  const toggleInvert = document.getElementById('toggleInvert');
   const toggleDedupe = document.getElementById('toggleDedupe');
   const toggleInResults = document.getElementById('toggleInResults');
   const searchBar = document.querySelector('.search-bar');
@@ -109,7 +107,7 @@
     const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode)
       ? ResultsRenderer.getDedupeMode()
       : false;
-    const hasActiveFilters = searchMode !== 'literal' || caseSensitive || invertMatch || !!fieldFilter.value || isDedupe || isInResultsMode;
+    const hasActiveFilters = searchMode !== 'literal' || !!fieldFilter.value || isDedupe || isInResultsMode;
 
     filterActiveDot.style.display = hasActiveFilters ? 'inline-block' : 'none';
     filterToggleBtn.classList.toggle('has-active-filters', hasActiveFilters);
@@ -226,28 +224,6 @@
         triggerSearch();
       }
     });
-  });
-
-  toggleCase.addEventListener('click', () => {
-    caseSensitive = !caseSensitive;
-    toggleCase.classList.toggle('active', caseSensitive);
-    updateFilterBadge();
-    if (isInResultsMode) {
-      applyInResultsFilter();
-    } else {
-      triggerSearch();
-    }
-  });
-
-  toggleInvert.addEventListener('click', () => {
-    invertMatch = !invertMatch;
-    toggleInvert.classList.toggle('active', invertMatch);
-    updateFilterBadge();
-    if (isInResultsMode) {
-      applyInResultsFilter();
-    } else {
-      triggerSearch();
-    }
   });
 
   if (toggleDedupe) {
@@ -390,12 +366,6 @@
         clearBtn.classList.remove('visible');
         clearSearch();
       }
-    }
-
-    // Alt+C — toggle case sensitivity
-    if (e.altKey && e.key === 'c') {
-      e.preventDefault();
-      toggleCase.click();
     }
 
     // Alt+U — toggle URL Only mode in field dropdown

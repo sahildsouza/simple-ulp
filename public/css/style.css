@@ -625,6 +625,8 @@ a {
   border: 1px solid var(--border-default);
   background: var(--surface-2);
   user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all var(--duration-fast);
 }
 
