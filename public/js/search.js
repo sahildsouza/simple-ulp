@@ -13,7 +13,7 @@ const SearchClient = (() => {
    * @param {Function} onError - Called on error
    * @returns {Function} Abort function
    */
-  async function search(params, onMatch, onStats, onError) {
+  async function search(params, onMatch, onStats, onError, onProgress) {
     // Abort any active search
     abort();
 
@@ -54,6 +54,8 @@ const SearchClient = (() => {
             const data = JSON.parse(line);
             if (data.type === 'match') {
               onMatch(data);
+            } else if (data.type === 'progress') {
+              if (onProgress) onProgress(data);
             } else if (data.type === 'stats') {
               onStats(data);
             } else if (data.type === 'error') {
@@ -70,6 +72,7 @@ const SearchClient = (() => {
         try {
           const data = JSON.parse(buffer);
           if (data.type === 'match') onMatch(data);
+          else if (data.type === 'progress') { if (onProgress) onProgress(data); }
           else if (data.type === 'stats') onStats(data);
           else if (data.type === 'error') onError(data.message);
         } catch (_) {}

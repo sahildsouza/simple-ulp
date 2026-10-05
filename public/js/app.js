@@ -54,6 +54,14 @@
   const fileBreakdownList = document.getElementById('fileBreakdownList');
   let isFileBreakdownOpen = false;
 
+  // Live Search Progress Bar elements
+  const searchProgressWrap = document.getElementById('searchProgressWrap');
+  const searchProgressBar = document.getElementById('searchProgressBar');
+  const searchProgressText = document.getElementById('searchProgressText');
+  let searchProgressTimer = null;
+  let searchProgressCurrentPct = 0;
+  let searchProgressHideTimeout = null;
+
   // Result Mode Tabs
   const modeTabs = [
     document.getElementById('tabModeRaw'),
@@ -299,6 +307,101 @@
 
   // ─── Search Logic ────────────────────────────
 
+  function showSearchProgress(totalFiles = 1) {
+    if (!searchProgressWrap || !searchProgressBar || !searchProgressText) return;
+    if (searchProgressHideTimeout) {
+      clearTimeout(searchProgressHideTimeout);
+      searchProgressHideTimeout = null;
+    }
+    if (searchProgressTimer) {
+      clearInterval(searchProgressTimer);
+      searchProgressTimer = null;
+    }
+
+    searchProgressWrap.classList.remove('is-complete');
+    searchProgressWrap.style.display = 'inline-flex';
+    searchProgressCurrentPct = 5;
+    searchProgressBar.style.width = '5%';
+    searchProgressText.textContent = totalFiles > 1 ? `Searching (${totalFiles} files)...` : 'Searching...';
+
+    const startTime = Date.now();
+
+    // Smooth progressive ticker while searching
+    searchProgressTimer = setInterval(() => {
+      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+      const curMatches = matchCount;
+
+      if (searchProgressCurrentPct < 90) {
+        searchProgressCurrentPct += Math.max(0.4, (90 - searchProgressCurrentPct) * 0.08);
+        searchProgressBar.style.width = `${Math.round(searchProgressCurrentPct)}%`;
+      }
+
+      if (curMatches > 0) {
+        searchProgressText.textContent = `${formatNumber(curMatches)} ${curMatches === 1 ? 'match' : 'matches'} • ${elapsedSec}s`;
+      } else {
+        searchProgressText.textContent = `Searching • ${elapsedSec}s`;
+      }
+    }, 200);
+  }
+
+  function updateSearchProgress(progressData) {
+    if (!searchProgressBar || !searchProgressText) return;
+    if (progressData && typeof progressData.percent === 'number') {
+      searchProgressCurrentPct = Math.max(searchProgressCurrentPct, progressData.percent);
+      searchProgressBar.style.width = `${searchProgressCurrentPct}%`;
+      const matches = progressData.matches || matchCount || 0;
+      const fileInfo = `${progressData.completedFiles || 0}/${progressData.totalFiles || 0} files`;
+      if (matches > 0) {
+        searchProgressText.textContent = `${fileInfo} (${searchProgressCurrentPct}%) • ${formatNumber(matches)} matches`;
+      } else {
+        searchProgressText.textContent = `${fileInfo} (${searchProgressCurrentPct}%)`;
+      }
+    }
+  }
+
+  function completeSearchProgress(stats) {
+    if (!searchProgressWrap || !searchProgressBar || !searchProgressText) return;
+    if (searchProgressTimer) {
+      clearInterval(searchProgressTimer);
+      searchProgressTimer = null;
+    }
+
+    searchProgressCurrentPct = 100;
+    searchProgressBar.style.width = '100%';
+    searchProgressWrap.classList.add('is-complete');
+
+    const totalMatches = stats ? (stats.matches || 0) : matchCount;
+    const elapsed = stats ? (stats.elapsed || '') : '';
+    searchProgressText.textContent = `Done • ${formatNumber(totalMatches)} ${totalMatches === 1 ? 'match' : 'matches'}${elapsed ? ` (${elapsed})` : ''}`;
+
+    // Auto-hide after 2.5s of showing completion
+    searchProgressHideTimeout = setTimeout(() => {
+      if (!isSearching) {
+        searchProgressWrap.style.display = 'none';
+        searchProgressWrap.classList.remove('is-complete');
+        searchProgressBar.style.width = '0%';
+      }
+    }, 2500);
+  }
+
+  function hideSearchProgress() {
+    if (searchProgressTimer) {
+      clearInterval(searchProgressTimer);
+      searchProgressTimer = null;
+    }
+    if (searchProgressHideTimeout) {
+      clearTimeout(searchProgressHideTimeout);
+      searchProgressHideTimeout = null;
+    }
+    if (searchProgressWrap) {
+      searchProgressWrap.style.display = 'none';
+      searchProgressWrap.classList.remove('is-complete');
+    }
+    if (searchProgressBar) {
+      searchProgressBar.style.width = '0%';
+    }
+  }
+
   function setSearchBtnState(searching) {
     isSearching = searching;
     if (!searchActionBtn) return;
@@ -323,6 +426,7 @@
     if (!isSearching) return;
     SearchClient.abort();
     setSearchBtnState(false);
+    hideSearchProgress();
 
     const totalRaw = ResultsRenderer.getResults().length;
     const viewMode = ResultsRenderer.getViewMode();
@@ -365,6 +469,7 @@
   async function executeSearch(query) {
     showState('loading');
     setSearchBtnState(true);
+    showSearchProgress(selectedFiles.length);
     matchCount = 0;
     ResultsRenderer.clear();
     if (fileBreakdownBar) fileBreakdownBar.style.display = 'none';
@@ -407,6 +512,7 @@
       // onStats
       (stats) => {
         setSearchBtnState(false);
+        completeSearchProgress(stats);
         const viewMode = ResultsRenderer.getViewMode();
         const activeCount = ResultsRenderer.getFilteredResults().length;
         const activeFilter = ResultsRenderer.getActiveFileFilter();
@@ -431,11 +537,16 @@
       // onError
       (errorMsg) => {
         setSearchBtnState(false);
+        hideSearchProgress();
         if (matchCount > 0) {
           showToast(errorMsg, 'error');
         } else {
           showError('Search failed', errorMsg);
         }
+      },
+      // onProgress
+      (prog) => {
+        updateSearchProgress(prog);
       }
     );
   }
@@ -609,6 +720,7 @@
   function clearSearch() {
     SearchClient.abort();
     setSearchBtnState(false);
+    hideSearchProgress();
     matchCount = 0;
     ResultsRenderer.clear();
     if (fileBreakdownBar) fileBreakdownBar.style.display = 'none';

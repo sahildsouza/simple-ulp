@@ -552,6 +552,7 @@ app.post('/api/search', (req, res) => {
 
   const startTime = Date.now();
   let matchCount = 0;
+  let completedFiles = 0;
 
   const rg = spawn(RG_BIN, args, { timeout: 120000 });
 
@@ -589,6 +590,19 @@ app.post('/api/search', (req, res) => {
           };
           if (!res.writableEnded) {
             res.write(JSON.stringify(matchData) + '\n');
+          }
+        } else if (parsed.type === 'end') {
+          completedFiles++;
+          const pct = Math.min(99, Math.round((completedFiles / filePaths.length) * 100));
+          if (!res.writableEnded) {
+            res.write(JSON.stringify({
+              type: 'progress',
+              completedFiles,
+              totalFiles: filePaths.length,
+              percent: pct,
+              file: path.basename(parsed.data.path.text),
+              matches: matchCount
+            }) + '\n');
           }
         }
       } catch (_) {
