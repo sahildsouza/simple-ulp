@@ -829,89 +829,196 @@ if (!fs.existsSync(ANALYTICS_CACHE_DIR)) {
   }
 }
 
-// In-memory cache for ultra-fast access: resolvedPath -> cacheData
+// In-memory cache for ultra-fast access: normPath -> cacheData
 const memoryAnalyticsCache = new Map();
 
-function getCacheKey(resolvedPath) {
-  return crypto.createHash('sha256').update(resolvedPath).digest('hex');
+function normalizePathForCache(filePath) {
+  const resolved = path.resolve(filePath);
+  return process.platform === 'win32' ? path.normalize(resolved).toLowerCase() : path.normalize(resolved);
 }
 
-function getCacheFilePath(resolvedPath) {
-  return path.join(ANALYTICS_CACHE_DIR, `${getCacheKey(resolvedPath)}.json`);
+function getCacheKey(filePath) {
+  const norm = normalizePathForCache(filePath);
+  return crypto.createHash('sha256').update(norm).digest('hex');
 }
 
-function getCachedFileAnalytics(resolvedPath, stat) {
-  // 1. Check in-memory cache first
-  if (memoryAnalyticsCache.has(resolvedPath)) {
-    const mem = memoryAnalyticsCache.get(resolvedPath);
-    if (mem && mem.size === stat.size && Math.abs(mem.mtimeMs - stat.mtimeMs) < 2) {
-      return mem;
+function getCacheMetaPath(filePath) {
+  return path.join(ANALYTICS_CACHE_DIR, `${getCacheKey(filePath)}.meta.json`);
+}
+
+function getCacheDataPath(filePath) {
+  return path.join(ANALYTICS_CACHE_DIR, `${getCacheKey(filePath)}.domains.json`);
+}
+
+function getLegacyCachePath(filePath) {
+  return path.join(ANALYTICS_CACHE_DIR, `${getCacheKey(filePath)}.json`);
+}
+
+function isTimestampValid(cachedMtime, statMtime) {
+  if (typeof cachedMtime !== 'number' || typeof statMtime !== 'number') return false;
+  // Allow up to 2000ms (2s) tolerance for filesystem timestamp precision / rounding across restarts
+  return Math.abs(cachedMtime - statMtime) <= 2000;
+}
+
+function getCachedFileMeta(filePath, stat) {
+  const normKey = normalizePathForCache(filePath);
+
+  // 1. In-memory check
+  if (memoryAnalyticsCache.has(normKey)) {
+    const mem = memoryAnalyticsCache.get(normKey);
+    if (mem && mem.size === stat.size && isTimestampValid(mem.mtimeMs, stat.mtimeMs)) {
+      return {
+        fileName: mem.fileName || path.basename(filePath),
+        size: mem.size,
+        mtimeMs: mem.mtimeMs,
+        totalLines: mem.totalLines,
+        uniqueDomains: mem.uniqueDomains || (mem.sortedDomains ? mem.sortedDomains.length : 0),
+        scannedAt: mem.scannedAt
+      };
     }
-    memoryAnalyticsCache.delete(resolvedPath);
+    memoryAnalyticsCache.delete(normKey);
   }
 
-  // 2. Check disk cache
-  const cachePath = getCacheFilePath(resolvedPath);
-  if (fs.existsSync(cachePath)) {
+  // 2. Check .meta.json on disk (ultra-fast ~200B read)
+  const metaPath = getCacheMetaPath(filePath);
+  if (fs.existsSync(metaPath)) {
     try {
-      const raw = fs.readFileSync(cachePath, 'utf8');
-      const data = JSON.parse(raw);
-      if (data && data.size === stat.size && Math.abs(data.mtimeMs - stat.mtimeMs) < 2 && data.domainCounts) {
-        if (!data.sortedDomains) {
-          data.sortedDomains = Object.entries(data.domainCounts)
-            .map(([domain, count]) => ({ domain, count }))
-            .sort((a, b) => b.count - a.count);
-        }
-        memoryAnalyticsCache.set(resolvedPath, data);
-        return data;
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      if (meta && meta.size === stat.size && isTimestampValid(meta.mtimeMs, stat.mtimeMs)) {
+        return meta;
       }
-    } catch (_) {
-      // Corrupt or unreadable cache file
-    }
+    } catch (_) {}
+  }
+
+  // 3. Fallback to legacy .json file if exists
+  const legacyPath = getLegacyCachePath(filePath);
+  if (fs.existsSync(legacyPath)) {
+    try {
+      const raw = fs.readFileSync(legacyPath, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && data.size === stat.size && isTimestampValid(data.mtimeMs, stat.mtimeMs)) {
+        return {
+          fileName: data.fileName || path.basename(filePath),
+          size: data.size,
+          mtimeMs: data.mtimeMs,
+          totalLines: data.totalLines,
+          uniqueDomains: data.uniqueDomains || (data.sortedDomains ? data.sortedDomains.length : 0),
+          scannedAt: data.scannedAt
+        };
+      }
+    } catch (_) {}
   }
 
   return null;
 }
 
-async function saveFileAnalyticsCache(resolvedPath, stat, totalLines, fileDomainMap) {
+function loadCachedFileAnalytics(filePath, stat) {
+  const normKey = normalizePathForCache(filePath);
+
+  // 1. In-memory check
+  if (memoryAnalyticsCache.has(normKey)) {
+    const mem = memoryAnalyticsCache.get(normKey);
+    if (mem && mem.size === stat.size && isTimestampValid(mem.mtimeMs, stat.mtimeMs)) {
+      return mem;
+    }
+    memoryAnalyticsCache.delete(normKey);
+  }
+
+  // 2. Disk check (.meta.json + .domains.json)
+  const metaPath = getCacheMetaPath(filePath);
+  const dataPath = getCacheDataPath(filePath);
+
+  if (fs.existsSync(metaPath) && fs.existsSync(dataPath)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      if (meta && meta.size === stat.size && isTimestampValid(meta.mtimeMs, stat.mtimeMs)) {
+        const sortedDomains = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        const fullData = {
+          ...meta,
+          sortedDomains
+        };
+        memoryAnalyticsCache.set(normKey, fullData);
+        return fullData;
+      }
+    } catch (err) {
+      console.error('Failed reading analytics cache files for:', filePath, err);
+    }
+  }
+
+  // 3. Legacy .json fallback
+  const legacyPath = getLegacyCachePath(filePath);
+  if (fs.existsSync(legacyPath)) {
+    try {
+      const raw = fs.readFileSync(legacyPath, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && data.size === stat.size && isTimestampValid(data.mtimeMs, stat.mtimeMs)) {
+        if (!data.sortedDomains && data.domainCounts) {
+          data.sortedDomains = Object.entries(data.domainCounts)
+            .map(([domain, count]) => ({ domain, count }))
+            .sort((a, b) => b.count - a.count);
+        }
+        memoryAnalyticsCache.set(normKey, data);
+        return data;
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+// Alias for backwards compatibility
+const getCachedFileAnalytics = loadCachedFileAnalytics;
+
+async function saveFileAnalyticsCache(filePath, stat, totalLines, fileDomainMap) {
   try {
-    const domainCounts = {};
     const sortedDomains = [];
     for (const [domain, count] of fileDomainMap.entries()) {
-      domainCounts[domain] = count;
       sortedDomains.push({ domain, count });
     }
     sortedDomains.sort((a, b) => b.count - a.count);
 
-    const cacheData = {
-      version: 1,
-      filePath: resolvedPath,
-      fileName: path.basename(resolvedPath),
+    const normKey = normalizePathForCache(filePath);
+    const fileName = path.basename(filePath);
+
+    const meta = {
+      version: 2,
+      filePath,
+      fileName,
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       totalLines,
       uniqueDomains: sortedDomains.length,
-      scannedAt: Date.now(),
-      domainCounts,
+      scannedAt: Date.now()
+    };
+
+    const fullData = {
+      ...meta,
       sortedDomains
     };
 
-    memoryAnalyticsCache.set(resolvedPath, cacheData);
+    memoryAnalyticsCache.set(normKey, fullData);
 
-    const cachePath = getCacheFilePath(resolvedPath);
-    await fs.promises.writeFile(cachePath, JSON.stringify(cacheData), 'utf8');
+    const metaPath = getCacheMetaPath(filePath);
+    const dataPath = getCacheDataPath(filePath);
+
+    // Save domain list and metadata
+    await fs.promises.writeFile(dataPath, JSON.stringify(sortedDomains), 'utf8');
+    await fs.promises.writeFile(metaPath, JSON.stringify(meta), 'utf8');
   } catch (err) {
     console.error('Failed to save analytics cache:', err);
   }
 }
 
-function clearAnalyticsCache(resolvedPath = null) {
-  if (resolvedPath) {
-    memoryAnalyticsCache.delete(resolvedPath);
-    const p = getCacheFilePath(resolvedPath);
-    if (fs.existsSync(p)) {
-      try { fs.unlinkSync(p); } catch (_) {}
-    }
+function clearAnalyticsCache(filePath = null) {
+  if (filePath) {
+    const normKey = normalizePathForCache(filePath);
+    memoryAnalyticsCache.delete(normKey);
+    const metaPath = getCacheMetaPath(filePath);
+    const dataPath = getCacheDataPath(filePath);
+    const legacyPath = getLegacyCachePath(filePath);
+    try { if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath); } catch (_) {}
+    try { if (fs.existsSync(dataPath)) fs.unlinkSync(dataPath); } catch (_) {}
+    try { if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath); } catch (_) {}
   } else {
     memoryAnalyticsCache.clear();
     if (fs.existsSync(ANALYTICS_CACHE_DIR)) {
@@ -919,7 +1026,7 @@ function clearAnalyticsCache(resolvedPath = null) {
         const files = fs.readdirSync(ANALYTICS_CACHE_DIR);
         for (const f of files) {
           if (f.endsWith('.json')) {
-            fs.unlinkSync(path.join(ANALYTICS_CACHE_DIR, f));
+            try { fs.unlinkSync(path.join(ANALYTICS_CACHE_DIR, f)); } catch (_) {}
           }
         }
       } catch (_) {}
@@ -927,12 +1034,23 @@ function clearAnalyticsCache(resolvedPath = null) {
   }
 }
 
-function aggregateRootDomains(domainCounts) {
+function getDomainEntries(cached) {
+  if (Array.isArray(cached.sortedDomains)) {
+    return cached.sortedDomains;
+  }
+  if (cached.domainCounts && typeof cached.domainCounts === 'object') {
+    return Object.entries(cached.domainCounts).map(([domain, count]) => ({ domain, count }));
+  }
+  return [];
+}
+
+function aggregateRootDomains(cached) {
   const rootMap = new Map();
-  for (const [host, count] of Object.entries(domainCounts)) {
-    const root = getRootDomain(host);
+  const entries = getDomainEntries(cached);
+  for (const item of entries) {
+    const root = getRootDomain(item.domain);
     if (root) {
-      rootMap.set(root, (rootMap.get(root) || 0) + count);
+      rootMap.set(root, (rootMap.get(root) || 0) + item.count);
     }
   }
   return Array.from(rootMap.entries())
@@ -1003,7 +1121,7 @@ app.post('/api/analytics/domains', async (req, res) => {
     if (cachedList.length === 1) {
       const data = cachedList[0].cached;
       const sorted = (groupMode === 'root')
-        ? aggregateRootDomains(data.domainCounts)
+        ? aggregateRootDomains(data)
         : data.sortedDomains;
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -1038,10 +1156,11 @@ app.post('/api/analytics/domains', async (req, res) => {
     const domainMap = new Map();
     for (const item of cachedList) {
       totalLines += item.cached.totalLines;
-      for (const [host, count] of Object.entries(item.cached.domainCounts)) {
-        const key = (groupMode === 'root') ? getRootDomain(host) : host;
+      const entries = getDomainEntries(item.cached);
+      for (const entry of entries) {
+        const key = (groupMode === 'root') ? getRootDomain(entry.domain) : entry.domain;
         if (key) {
-          domainMap.set(key, (domainMap.get(key) || 0) + count);
+          domainMap.set(key, (domainMap.get(key) || 0) + entry.count);
         }
       }
     }
@@ -1087,10 +1206,11 @@ app.post('/api/analytics/domains', async (req, res) => {
   // 1. Preload any cached files into domainMap
   for (const item of cachedList) {
     totalLines += item.cached.totalLines;
-    for (const [host, count] of Object.entries(item.cached.domainCounts)) {
-      const key = (groupMode === 'root') ? getRootDomain(host) : host;
+    const entries = getDomainEntries(item.cached);
+    for (const entry of entries) {
+      const key = (groupMode === 'root') ? getRootDomain(entry.domain) : entry.domain;
       if (key) {
-        domainMap.set(key, (domainMap.get(key) || 0) + count);
+        domainMap.set(key, (domainMap.get(key) || 0) + entry.count);
       }
     }
   }
@@ -1243,14 +1363,14 @@ app.post('/api/analytics/cache-status', (req, res) => {
       continue;
     }
     const stat = fs.statSync(p);
-    const cached = getCachedFileAnalytics(p, stat);
+    const cached = getCachedFileMeta(p, stat);
     if (cached) {
       cachedCount++;
       results.push({
         name: f,
         cached: true,
         totalLines: cached.totalLines,
-        uniqueDomains: cached.uniqueDomains || (cached.sortedDomains ? cached.sortedDomains.length : 0),
+        uniqueDomains: cached.uniqueDomains,
         scannedAt: cached.scannedAt
       });
     } else {

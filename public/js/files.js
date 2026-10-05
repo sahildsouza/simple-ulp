@@ -6,6 +6,29 @@ const FileManager = (() => {
   let files = [];
   let selectedFiles = new Set();
   let onSelectionChange = null;
+  const STORAGE_KEY = 'ulp_selected_files';
+
+  function saveSelectionToStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(selectedFiles)));
+    } catch (_) {}
+  }
+
+  function restoreSelectionFromStorage(availableFiles) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return false;
+      const availableNames = new Set(availableFiles.map(f => f.name));
+      const valid = parsed.filter(name => availableNames.has(name));
+      if (valid.length > 0) {
+        selectedFiles = new Set(valid);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
 
   /**
    * Initialize file manager
@@ -42,8 +65,12 @@ const FileManager = (() => {
 
       renderFileList(listEl);
 
-      // Auto-select all files
-      files.forEach(f => selectedFiles.add(f.name));
+      // Restore previously saved selection or default to all files
+      const restored = restoreSelectionFromStorage(files);
+      if (!restored) {
+        files.forEach(f => selectedFiles.add(f.name));
+        saveSelectionToStorage();
+      }
       updateCheckboxes();
       if (onSelectionChange) onSelectionChange(getSelected());
     } catch (err) {
@@ -74,6 +101,7 @@ const FileManager = (() => {
           selectedFiles.delete(file.name);
           item.classList.remove('selected');
         }
+        saveSelectionToStorage();
         if (onSelectionChange) onSelectionChange(getSelected());
       });
 
@@ -114,6 +142,7 @@ const FileManager = (() => {
    */
   function selectAll() {
     files.forEach(f => selectedFiles.add(f.name));
+    saveSelectionToStorage();
     updateCheckboxes();
     if (onSelectionChange) onSelectionChange(getSelected());
   }
@@ -123,6 +152,7 @@ const FileManager = (() => {
    */
   function selectNone() {
     selectedFiles.clear();
+    saveSelectionToStorage();
     updateCheckboxes();
     if (onSelectionChange) onSelectionChange(getSelected());
   }

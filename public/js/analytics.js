@@ -521,18 +521,19 @@ const AnalyticsApp = (() => {
 
       const files = getSelectedFiles();
       if (files.length === 0) {
+        updateFileBadge();
         showTableMessage('folder', 'No Log Files Selected', 'Select one or more log files from the left sidebar to list domains.', false, true);
       } else if (allDomains.length > 0 && filesEqual(files, lastAnalyzedFiles)) {
         // Already have analyzed results for this exact file selection
+        updateFileBadge();
         hideTableMessage();
         requestAnimationFrame(() => {
           renderVisible();
           updateFastScrollThumb();
         });
       } else {
-        // Files are selected, but DO NOT auto-scan: offer the option to run with live progress bar
-        const filesDesc = files.length === 1 ? files[0] : `${files.length} log files`;
-        showTableMessage('analytics', 'Ready for Log Domain Analytics', `Selected: ${filesDesc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
+        // Check cache status and auto-load if all cached, or prompt to run
+        updateFileBadge();
       }
     } else {
       if (navAnalytics) navAnalytics.classList.remove('active');
@@ -594,7 +595,10 @@ const AnalyticsApp = (() => {
 
       const desc = selected.length === 1 ? selected[0] : `${selected.length} log files`;
       if (cacheStatus.allCached) {
-        showTableMessage('analytics', 'Log Scan Data Stored', `Selected: ${desc}. Domain scan data is already stored. Click "Run Analytics" to load instantly without re-scanning.`, true, false, 'View Stored Analytics (Instant)');
+        // Auto-load stored analytics data immediately!
+        startAnalytics(false);
+      } else if (cacheStatus.cachedCount > 0) {
+        showTableMessage('analytics', 'Ready for Log Domain Analytics', `Selected: ${desc} (${cacheStatus.cachedCount} of ${cacheStatus.totalFiles} stored in cache). Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
       } else {
         showTableMessage('analytics', 'Ready for Log Domain Analytics', `Selected: ${desc}. Click "Run Analytics" to begin domain frequency extraction with live progress.`, true, false);
       }
