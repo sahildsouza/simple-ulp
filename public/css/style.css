@@ -471,14 +471,73 @@ a {
   flex-shrink: 0;
 }
 
+/* ─── Filter Toggle Button (Beside Search Button) ─── */
+
+.btn-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
+  user-select: none;
+  position: relative;
+}
+
+.btn-filter-toggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-filter-toggle[aria-expanded="true"],
+.btn-filter-toggle.is-open {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-filter-toggle.has-active-filters {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filter-toggle-icon {
+  flex-shrink: 0;
+}
+
+.filter-active-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent);
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
 /* ─── Search Options ──────────────────────────── */
 
 .search-options {
-  display: flex;
+  display: none;
   align-items: center;
   margin-top: var(--sp-3);
   gap: var(--sp-3);
   flex-wrap: wrap;
+  animation: fadeIn var(--duration-fast) ease-out;
+}
+
+.search-options.is-visible {
+  display: flex;
 }
 
 .search-toggles {
@@ -1759,6 +1818,11 @@ a {
 
     .btn-search-action {
       padding: 0 10px;
+      font-size: var(--text-xs);
+    }
+
+    .btn-filter-toggle {
+      padding: 0 8px;
       font-size: var(--text-xs);
     }
 

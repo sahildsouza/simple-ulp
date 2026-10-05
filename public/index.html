@@ -102,10 +102,17 @@
             </svg>
             <span class="search-btn-text" id="searchBtnText">Search</span>
           </button>
+          <button class="btn-filter-toggle" id="filterToggleBtn" type="button" aria-label="Toggle search options" aria-expanded="false" title="Search options / filters (Alt+F)">
+            <svg class="filter-toggle-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="filter-toggle-text">Filter</span>
+            <span class="filter-active-dot" id="filterActiveDot" style="display: none;"></span>
+          </button>
         </div>
 
         <!-- ─── Search Options ──────────── -->
-        <div class="search-options">
+        <div class="search-options" id="searchOptions" style="display: none;">
           <div class="search-toggles">
             <button class="toggle-btn active" id="modeLiteral" data-mode="literal" title="Literal match (exact text)">
               <span>Abc</span>

@@ -20,6 +20,10 @@
   const iconSearch = document.getElementById('iconSearch');
   const iconStop = document.getElementById('iconStop');
   const searchBtnText = document.getElementById('searchBtnText');
+  const filterToggleBtn = document.getElementById('filterToggleBtn');
+  const searchOptions = document.getElementById('searchOptions');
+  const filterActiveDot = document.getElementById('filterActiveDot');
+  let isSearchOptionsOpen = false;
   const modeLiteral = document.getElementById('modeLiteral');
   const modeRegex = document.getElementById('modeRegex');
   const modeWord = document.getElementById('modeWord');
@@ -84,6 +88,36 @@
     }
   });
 
+  // ─── Search Filter Options Toggle ────────────
+
+  function toggleSearchOptions(forceState) {
+    if (!searchOptions || !filterToggleBtn) return;
+    const shouldOpen = (forceState !== undefined) ? forceState : !isSearchOptionsOpen;
+    isSearchOptionsOpen = shouldOpen;
+    searchOptions.style.display = shouldOpen ? 'flex' : 'none';
+    searchOptions.classList.toggle('is-visible', shouldOpen);
+    filterToggleBtn.classList.toggle('is-open', shouldOpen);
+    filterToggleBtn.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  }
+
+  function updateFilterBadge() {
+    if (!filterActiveDot || !filterToggleBtn) return;
+    const isDedupe = (typeof ResultsRenderer !== 'undefined' && ResultsRenderer.getDedupeMode)
+      ? ResultsRenderer.getDedupeMode()
+      : false;
+    const hasActiveFilters = searchMode !== 'literal' || caseSensitive || invertMatch || !!fieldFilter.value || isDedupe;
+
+    filterActiveDot.style.display = hasActiveFilters ? 'inline-block' : 'none';
+    filterToggleBtn.classList.toggle('has-active-filters', hasActiveFilters);
+  }
+
+  if (filterToggleBtn) {
+    filterToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSearchOptions();
+    });
+  }
+
   // ─── Search Mode Toggles ─────────────────────
 
   const modeButtons = [modeLiteral, modeRegex, modeWord];
@@ -93,6 +127,7 @@
       modeButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       searchMode = btn.dataset.mode;
+      updateFilterBadge();
       triggerSearch();
     });
   });
@@ -100,12 +135,14 @@
   toggleCase.addEventListener('click', () => {
     caseSensitive = !caseSensitive;
     toggleCase.classList.toggle('active', caseSensitive);
+    updateFilterBadge();
     triggerSearch();
   });
 
   toggleInvert.addEventListener('click', () => {
     invertMatch = !invertMatch;
     toggleInvert.classList.toggle('active', invertMatch);
+    updateFilterBadge();
     triggerSearch();
   });
 
@@ -114,6 +151,7 @@
       const isDedupe = ResultsRenderer.toggleDedupeMode();
       toggleDedupe.classList.toggle('active', isDedupe);
       toggleDedupe.setAttribute('aria-pressed', isDedupe);
+      updateFilterBadge();
       updateStatsText();
       if (typeof showToast === 'function') {
         showToast(isDedupe ? 'Duplicates hidden (showing unique records)' : 'Showing all records (including duplicates)', 'info');
@@ -122,6 +160,7 @@
   }
 
   fieldFilter.addEventListener('change', () => {
+    updateFilterBadge();
     if (fieldFilter.value === 'url') {
       searchInput.placeholder = 'Search URLs only… e.g. netflix.com, /login (Enter or click Search)';
     } else if (fieldFilter.value === 'username') {
@@ -255,6 +294,12 @@
     if (e.altKey && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
       if (toggleDedupe) toggleDedupe.click();
+    }
+
+    // Alt+F — toggle search options / filters
+    if (e.altKey && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      toggleSearchOptions();
     }
   });
 
