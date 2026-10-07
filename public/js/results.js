@@ -23,6 +23,7 @@ const ResultsRenderer = (() => {
   let isDedupeActive = false;
   let streamingDedupeSeen = new Set();
   let inResultsFilter = null;
+  let streamRenderScheduled = false;
 
   // Counts for each mode
   let counts = { raw: 0, email: 0, username: 0, phone: 0 };
@@ -562,6 +563,20 @@ const ResultsRenderer = (() => {
   }
 
   /**
+   * Schedule smooth batch render via requestAnimationFrame to avoid per-item DOM thrashing
+   */
+  function scheduleStreamRender() {
+    if (streamRenderScheduled) return;
+    streamRenderScheduled = true;
+    requestAnimationFrame(() => {
+      streamRenderScheduled = false;
+      if (!viewport || !scrollContainer) return;
+      viewport.style.height = (filteredResults.length * ROW_HEIGHT) + 'px';
+      renderVisible();
+    });
+  }
+
+  /**
    * Set the results data and render
    */
   function setResults(data, isMultiFile) {
@@ -569,43 +584,43 @@ const ResultsRenderer = (() => {
     multiFileMode = isMultiFile;
     fileMatchCounts = {};
 
-    // Re-parse and recalculate counts
+    // Calculate counts (only parse if structured fields are missing)
     counts = { raw: allResults.length, email: 0, username: 0, phone: 0 };
     for (const r of allResults) {
       if (r.file) {
         fileMatchCounts[r.file] = (fileMatchCounts[r.file] || 0) + 1;
       }
-      if (r.content) {
+      if (!r.url && !r.user && !r.pass && r.content) {
         const parsed = parseLogLine(r.content);
         r.url = parsed.url;
         r.user = parsed.user;
         r.pass = parsed.pass;
         r.identityType = parsed.identityType;
-      } else if (r.pass) {
+      } else if (r.pass && !r.user) {
         r.pass = cleanPassword(r.pass);
       }
       if (r.identityType === 'email') counts.email++;
       else if (r.identityType === 'username') counts.username++;
       else if (r.identityType === 'phone') counts.phone++;
     }
-    updateTabCounts();
     applyFilter();
   }
 
   /**
-   * Append results incrementally during streaming
+   * Append results incrementally during streaming (zero redundant parsing, throttled rendering)
    */
   function appendResult(result) {
     if (result.file) {
       fileMatchCounts[result.file] = (fileMatchCounts[result.file] || 0) + 1;
     }
-    if (result.content) {
+    // Zero-redundancy: use server-provided parsed fields directly
+    if (!result.url && !result.user && !result.pass && result.content) {
       const parsed = parseLogLine(result.content);
       result.url = parsed.url;
       result.user = parsed.user;
       result.pass = parsed.pass;
       result.identityType = parsed.identityType;
-    } else if (result.pass) {
+    } else if (result.pass && !result.user) {
       result.pass = cleanPassword(result.pass);
     }
     allResults.push(result);
@@ -613,8 +628,6 @@ const ResultsRenderer = (() => {
     if (result.identityType === 'email') counts.email++;
     else if (result.identityType === 'username') counts.username++;
     else if (result.identityType === 'phone') counts.phone++;
-
-    updateTabCounts();
 
     // Check if result matches current filter
     let matchesCurrent = true;
@@ -632,16 +645,7 @@ const ResultsRenderer = (() => {
         streamingDedupeSeen.add(dedupeKey);
       }
       filteredResults.push(result);
-      const newLen = filteredResults.length;
-      viewport.style.height = (newLen * ROW_HEIGHT) + 'px';
-
-      const scrollTop = scrollContainer.scrollTop;
-      const containerHeight = scrollContainer.clientHeight || window.innerHeight;
-      const itemTop = (newLen - 1) * ROW_HEIGHT;
-
-      if (itemTop <= scrollTop + containerHeight + BUFFER_ROWS * ROW_HEIGHT) {
-        renderRow(newLen - 1);
-      }
+      scheduleStreamRender();
     }
   }
 
@@ -651,6 +655,7 @@ const ResultsRenderer = (() => {
   function clear() {
     closeRawDropdown();
     inResultsFilter = null;
+    streamRenderScheduled = false;
     allResults = [];
     filteredResults = [];
     fileMatchCounts = {};

@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const readline = require('readline');
 const crypto = require('crypto');
+const { Worker } = require('worker_threads');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -84,21 +85,25 @@ function estimateLineCount(sizeBytes, avgLineLen = 67) {
  */
 function cleanPassword(pass) {
   if (!pass) return '';
-  // 1. If there is a tab, everything from the first tab is watermark/metadata
   if (pass.includes('\t')) {
     pass = pass.split('\t')[0];
   }
-  // 2. Pipe separator with surrounding spaces: ' | ', ' |', '| '
-  pass = pass.replace(/\s*\|\s*.*$/, '');
-  // 3. Arrow separators: ' ➔ ', ' -> ', ' => ', etc.
-  pass = pass.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
-  pass = pass.replace(/\s+(?:->|=>)\s+.*$/, '');
-  // 4. Control characters (like \u001f, \x00-\x1f)
-  pass = pass.replace(/[\x00-\x1f\x7f-\x9f].*$/, '');
-  // 5. Multiple spaces followed by promo text (@, t.me, http, lifetime, cloud, telegram, brackets)
-  pass = pass.replace(/\s{2,}(?:[@#|~]|t\.me\/|https?:\/\/|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$/i, '');
-  // 6. Trailing unicode watermark symbols
-  pass = pass.replace(/[\s\u200B-\u200D\uFEFF]*[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ].*$/, '');
+  if (pass.includes('|')) {
+    pass = pass.replace(/\s*\|\s*.*$/, '');
+  }
+  if (pass.includes('->') || pass.includes('=>') || /[\s➔➜➞➝➢➣➤⇻]/.test(pass)) {
+    pass = pass.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
+    pass = pass.replace(/\s+(?:->|=>)\s+.*$/, '');
+  }
+  if (/[\x00-\x1f\x7f-\x9f]/.test(pass)) {
+    pass = pass.replace(/[\x00-\x1f\x7f-\x9f].*$/, '');
+  }
+  if (pass.includes('  ')) {
+    pass = pass.replace(/\s{2,}(?:[@#|~]|t\.me\/|https?:\/\/|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$/i, '');
+  }
+  if (/[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ]/.test(pass)) {
+    pass = pass.replace(/[\s\u200B-\u200D\uFEFF]*[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ].*$/, '');
+  }
   return pass.trim();
 }
 
@@ -108,20 +113,23 @@ function cleanPassword(pass) {
 function stripAdSuffix(line) {
   if (!line) return '';
   let cleaned = line.trim();
-  // 1. If line contains a tab, scrapers/clouds append watermarks after tab
   if (cleaned.includes('\t')) {
     cleaned = cleaned.split('\t')[0].trim();
   }
-  // 2. Pipe delimiter followed by ads
-  cleaned = cleaned.replace(/\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d).*$/i, '');
-  // 3. Arrows followed by ads
-  cleaned = cleaned.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
-  cleaned = cleaned.replace(/[\t\s]+(?:->|=>)\s+.*$/, '');
-  // 4. Standalone t.me links at end
-  cleaned = cleaned.replace(/[\t\s]+t\.me\/[a-zA-Z0-9_\-\.\/]+.*$/i, '');
-  // 5. Bracketed tags
-  cleaned = cleaned.replace(/[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$/i, '');
-  cleaned = cleaned.replace(/[\t\s]+\((?:@|t\.me)[^\)]*\).*$/i, '');
+  if (cleaned.includes('|')) {
+    cleaned = cleaned.replace(/\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d).*$/i, '');
+  }
+  if (cleaned.includes('->') || cleaned.includes('=>') || /[\s➔➜➞➝➢➣➤⇻]/.test(cleaned)) {
+    cleaned = cleaned.replace(/\s*[➔➜➞➝➢➣➤⇻]\s*.*$/, '');
+    cleaned = cleaned.replace(/[\t\s]+(?:->|=>)\s+.*$/, '');
+  }
+  if (cleaned.includes('t.me/')) {
+    cleaned = cleaned.replace(/[\t\s]+t\.me\/[a-zA-Z0-9_\-\.\/]+.*$/i, '');
+  }
+  if (cleaned.includes('[') || cleaned.includes('(')) {
+    cleaned = cleaned.replace(/[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$/i, '');
+    cleaned = cleaned.replace(/[\t\s]+\((?:@|t\.me)[^\)]*\).*$/i, '');
+  }
   return cleaned.trim();
 }
 
@@ -832,6 +840,263 @@ function getRootDomain(hostname) {
   return parts.slice(-2).join('.');
 }
 
+/**
+ * Fast domain extraction directly from raw byte buffer slice
+ */
+function extractDomainFromBytes(buf, start, end) {
+  while (start < end) {
+    const c = buf[start];
+    if (c === 32 || c === 9 || c === 13 || c === 10) start++;
+    else break;
+  }
+  while (end > start) {
+    const c = buf[end - 1];
+    if (c === 32 || c === 9 || c === 13 || c === 10) end--;
+    else break;
+  }
+  if (start >= end) return null;
+
+  let p = start;
+  for (; p < end - 2; p++) {
+    if (buf[p] === 58 && buf[p + 1] === 47 && buf[p + 2] === 47) { // ://
+      start = p + 3;
+      break;
+    }
+    if (p - start > 20 || buf[p] === 47 || buf[p] === 32) break;
+  }
+
+  let hostEnd = start;
+  for (; hostEnd < end; hostEnd++) {
+    const c = buf[hostEnd];
+    if (c === 47 || c === 58 || c === 32 || c === 9 || c === 124) break;
+  }
+  if (hostEnd <= start) return null;
+
+  let host = buf.toString('utf8', start, hostEnd).toLowerCase().trim();
+  if (host.startsWith('www.')) host = host.substring(4);
+  const portIdx = host.indexOf(':');
+  if (portIdx !== -1) host = host.substring(0, portIdx);
+  if (host.includes('@')) host = host.substring(host.lastIndexOf('@') + 1);
+
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return host;
+  if (host.includes('.') && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) return host;
+  return null;
+}
+
+/**
+ * Compute non-overlapping byte ranges aligned with line boundaries (\n)
+ */
+function computeWorkerSlices(filePath, totalSize, numWorkers) {
+  if (numWorkers <= 1 || totalSize < 4 * 1024 * 1024) {
+    return [{ id: 0, start: 0, end: totalSize }];
+  }
+  const fd = fs.openSync(filePath, 'r');
+  const slices = [];
+  let prevEnd = 0;
+  try {
+    for (let i = 0; i < numWorkers; i++) {
+      const rawEnd = (i === numWorkers - 1) ? totalSize : Math.floor((i + 1) * totalSize / numWorkers);
+      let endOffset = rawEnd;
+      if (rawEnd < totalSize) {
+        const check = Buffer.alloc(1);
+        fs.readSync(fd, check, 0, 1, rawEnd - 1);
+        if (check[0] !== 10) {
+          const sBuf = Buffer.alloc(64 * 1024);
+          let cur = rawEnd;
+          let found = false;
+          while (!found && cur < totalSize) {
+            const r = fs.readSync(fd, sBuf, 0, Math.min(sBuf.length, totalSize - cur), cur);
+            if (r === 0) break;
+            for (let j = 0; j < r; j++) {
+              if (sBuf[j] === 10) { endOffset = cur + j + 1; found = true; break; }
+            }
+            if (!found) cur += r;
+          }
+          if (!found) endOffset = totalSize;
+        }
+      }
+      slices.push({ id: i, start: prevEnd, end: endOffset });
+      prevEnd = endOffset;
+    }
+  } finally {
+    try { fs.closeSync(fd); } catch (_) {}
+  }
+  return slices;
+}
+
+/**
+ * Fast single-thread zero-allocation buffer scanner (fallback or small files)
+ */
+function scanFileSingleThreadBuffer(filePath, totalSize, onProgress, controller) {
+  const fd = fs.openSync(filePath, 'r');
+  const buf = Buffer.alloc(4 * 1024 * 1024);
+  let pos = 0;
+  let remainder = Buffer.alloc(0);
+  const fileDomainMap = new Map();
+  let fileLines = 0;
+  let lastProgress = Date.now();
+  let lastReportedLines = 0;
+
+  try {
+    while (pos < totalSize) {
+      if (controller && controller.isAborted) break;
+      const toRead = Math.min(buf.length, totalSize - pos);
+      const read = fs.readSync(fd, buf, 0, toRead, pos);
+      if (read === 0) break;
+      pos += read;
+
+      let chunk = buf.subarray(0, read);
+      if (remainder.length > 0) {
+        chunk = Buffer.concat([remainder, chunk]);
+        remainder = Buffer.alloc(0);
+      }
+
+      let lineStart = 0;
+      for (let i = 0; i < chunk.length; i++) {
+        if (chunk[i] === 10) {
+          fileLines++;
+          let lineEnd = (i > 0 && chunk[i - 1] === 13) ? i - 1 : i;
+          const d = extractDomainFromBytes(chunk, lineStart, lineEnd);
+          if (d) fileDomainMap.set(d, (fileDomainMap.get(d) || 0) + 1);
+          lineStart = i + 1;
+        }
+      }
+
+      if (lineStart < chunk.length) {
+        remainder = Buffer.from(chunk.subarray(lineStart));
+      }
+
+      const now = Date.now();
+      if (now - lastProgress > 250) {
+        const deltaLines = fileLines - lastReportedLines;
+        lastReportedLines = fileLines;
+        lastProgress = now;
+        if (onProgress) {
+          onProgress({ deltaBytes: pos, deltaLines });
+        }
+      }
+    }
+
+    if (!(controller && controller.isAborted) && remainder.length > 0) {
+      fileLines++;
+      const d = extractDomainFromBytes(remainder, 0, remainder.length);
+      if (d) fileDomainMap.set(d, (fileDomainMap.get(d) || 0) + 1);
+    }
+  } finally {
+    try { fs.closeSync(fd); } catch (_) {}
+  }
+
+  return { fileLines, fileDomainMap, aborted: Boolean(controller && controller.isAborted) };
+}
+
+/**
+ * Fast multi-threaded worker scanner with auto-fallback to buffer scanner
+ */
+function scanFileFast(fileInfo, onProgress, controller) {
+  return new Promise((resolve, reject) => {
+    const totalSize = fileInfo.size;
+    const cpuCount = (os.cpus() && os.cpus().length) ? os.cpus().length : 2;
+    const numWorkers = (totalSize >= 4 * 1024 * 1024 && cpuCount > 1)
+      ? Math.min(cpuCount, 8)
+      : 1;
+
+    if (numWorkers <= 1) {
+      try {
+        const res = scanFileSingleThreadBuffer(fileInfo.path, totalSize, onProgress, controller);
+        return resolve(res);
+      } catch (err) {
+        return reject(err);
+      }
+    }
+
+    const workerScript = path.join(__dirname, 'analytics-worker.js');
+    if (!fs.existsSync(workerScript)) {
+      try {
+        const res = scanFileSingleThreadBuffer(fileInfo.path, totalSize, onProgress, controller);
+        return resolve(res);
+      } catch (err) {
+        return reject(err);
+      }
+    }
+
+    const slices = computeWorkerSlices(fileInfo.path, totalSize, numWorkers);
+    const workers = [];
+    let completedWorkers = 0;
+    let fileLines = 0;
+    const fileDomainMap = new Map();
+    const workerBytesMap = new Map();
+    let hasResolved = false;
+
+    const cleanup = () => {
+      workers.forEach(w => {
+        try { w.terminate(); } catch (_) {}
+      });
+    };
+
+    if (controller) {
+      const origAbort = controller.abort;
+      controller.abort = () => {
+        if (origAbort) origAbort();
+        cleanup();
+        if (!hasResolved) {
+          hasResolved = true;
+          resolve({ fileLines, fileDomainMap, aborted: true });
+        }
+      };
+    }
+
+    for (const slice of slices) {
+      const worker = new Worker(workerScript, {
+        workerData: {
+          filePath: fileInfo.path,
+          start: slice.start,
+          end: slice.end,
+          workerId: slice.id
+        }
+      });
+      workers.push(worker);
+
+      worker.on('message', (msg) => {
+        if (hasResolved || (controller && controller.isAborted)) return;
+
+        if (msg.type === 'progress') {
+          workerBytesMap.set(msg.workerId, msg.bytesProcessed || 0);
+          let totalBytesDone = 0;
+          for (const b of workerBytesMap.values()) totalBytesDone += b;
+          if (onProgress) {
+            onProgress({ deltaBytes: totalBytesDone, deltaLines: msg.deltaLines || 0 });
+          }
+        } else if (msg.type === 'done') {
+          fileLines += msg.lines || 0;
+          for (const [domain, count] of msg.domains) {
+            fileDomainMap.set(domain, (fileDomainMap.get(domain) || 0) + count);
+          }
+          completedWorkers++;
+          if (completedWorkers === numWorkers) {
+            hasResolved = true;
+            cleanup();
+            resolve({ fileLines, fileDomainMap });
+          }
+        } else if (msg.type === 'aborted') {
+          completedWorkers++;
+          if (completedWorkers === numWorkers) {
+            hasResolved = true;
+            cleanup();
+            resolve({ fileLines, fileDomainMap, aborted: true });
+          }
+        }
+      });
+
+      worker.on('error', (err) => {
+        if (hasResolved) return;
+        hasResolved = true;
+        cleanup();
+        reject(err);
+      });
+    }
+  });
+}
+
 // ─── Domain Extraction & Analytics Persistent Cache ─────────
 
 const ANALYTICS_CACHE_DIR = path.join(__dirname, '.analytics_cache');
@@ -1229,77 +1494,40 @@ app.post('/api/analytics/domains', async (req, res) => {
     }
   }
 
-  // Online top 35 domains tracking for live streaming
-  let topList = [];
-  let minTopCount = 0;
-
-  function recordDomain(key, fileDomainMap) {
-    const count = (domainMap.get(key) || 0) + 1;
-    domainMap.set(key, count);
-    fileDomainMap.set(key, (fileDomainMap.get(key) || 0) + 1);
-
-    if (count >= minTopCount || topList.length < 35) {
-      let found = false;
-      for (let i = 0; i < topList.length; i++) {
-        if (topList[i].domain === key) {
-          topList[i].count = count;
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        topList.push({ domain: key, count });
-      }
-      if (topList.length > 50) {
-        topList.sort((a, b) => b.count - a.count);
-        topList = topList.slice(0, 35);
-        minTopCount = topList[topList.length - 1].count;
-      }
-    }
-  }
-
   try {
     for (const f of uncachedList) {
       if (aborted) break;
 
-      const fileDomainMap = new Map();
-      let fileLines = 0;
-      const fileStream = fs.createReadStream(f.path);
-      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+      let fileProcessedBytes = 0;
+      let fileScanLines = 0;
 
-      for await (const line of rl) {
-        if (aborted) {
-          rl.close();
-          fileStream.destroy();
-          break;
-        }
-
-        totalLines++;
-        fileLines++;
-        if (line) {
-          const host = extractDomain(line);
-          if (host) {
-            const key = (groupMode === 'root') ? getRootDomain(host) : host;
-            if (key) {
-              recordDomain(key, fileDomainMap);
-            }
-          }
-        }
-
-        const now = Date.now();
-        if (now - lastProgressTime > 400) {
-          lastProgressTime = now;
-          if (!res.writableEnded) {
-            const currentBytes = processedScanBytes + (fileStream.bytesRead || 0);
+      const scanResult = await scanFileFast(
+        f,
+        (progressInfo) => {
+          if (aborted || res.writableEnded) return;
+          fileProcessedBytes = progressInfo.deltaBytes || 0;
+          fileScanLines += progressInfo.deltaLines || 0;
+          const currentTotalLines = totalLines + fileScanLines;
+          const now = Date.now();
+          if (now - lastProgressTime > 250) {
+            lastProgressTime = now;
+            const currentBytes = processedScanBytes + fileProcessedBytes;
             const percent = totalBytesToScan > 0 ? Math.min(99, Math.round((currentBytes / totalBytesToScan) * 100)) : 0;
             const elapsedSec = (now - startTime) / 1000;
-            const linesPerSec = elapsedSec > 0 ? Math.round(totalLines / elapsedSec) : 0;
-            const liveTop = topList.slice().sort((a, b) => b.count - a.count).slice(0, 35);
+            const linesPerSec = elapsedSec > 0 ? Math.round(currentTotalLines / elapsedSec) : 0;
+
+            let liveTop = [];
+            if (domainMap.size > 0) {
+              liveTop = Array.from(domainMap.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 35)
+                .map(([domain, count]) => ({ domain, count }));
+            }
 
             res.write(JSON.stringify({
               type: 'progress',
               currentFile: f.name,
-              totalLines,
+              totalLines: currentTotalLines,
               uniqueDomains: domainMap.size,
               percent,
               linesPerSec,
@@ -1307,14 +1535,50 @@ app.post('/api/analytics/domains', async (req, res) => {
               topDomains: liveTop
             }) + '\n');
           }
+        },
+        controller
+      );
+
+      if (scanResult.aborted || aborted) {
+        aborted = true;
+        break;
+      }
+
+      totalLines += scanResult.fileLines;
+      processedScanBytes += f.size;
+
+      // Save scan data into persistent cache for this file!
+      await saveFileAnalyticsCache(f.path, f.stat, scanResult.fileLines, scanResult.fileDomainMap);
+
+      // Merge into overall domainMap
+      for (const [domain, count] of scanResult.fileDomainMap.entries()) {
+        const key = (groupMode === 'root') ? getRootDomain(domain) : domain;
+        if (key) {
+          domainMap.set(key, (domainMap.get(key) || 0) + count);
         }
       }
 
-      processedScanBytes += f.size;
+      // Intermediate file completion progress
+      if (!res.writableEnded) {
+        const now = Date.now();
+        const percent = totalBytesToScan > 0 ? Math.min(99, Math.round((processedScanBytes / totalBytesToScan) * 100)) : 0;
+        const elapsedSec = (now - startTime) / 1000;
+        const linesPerSec = elapsedSec > 0 ? Math.round(totalLines / elapsedSec) : 0;
+        const liveTop = Array.from(domainMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 35)
+          .map(([domain, count]) => ({ domain, count }));
 
-      if (!aborted) {
-        // Save scan data into persistent cache for this file!
-        await saveFileAnalyticsCache(f.path, f.stat, fileLines, fileDomainMap);
+        res.write(JSON.stringify({
+          type: 'progress',
+          currentFile: f.name,
+          totalLines,
+          uniqueDomains: domainMap.size,
+          percent,
+          linesPerSec,
+          elapsed: elapsedSec.toFixed(1) + 's',
+          topDomains: liveTop
+        }) + '\n');
       }
     }
 

@@ -1020,11 +1020,11 @@ const AnalyticsApp = (() => {
         if (a.count !== b.count) {
           return (a.count - b.count) * dir;
         }
-        return a.domain.localeCompare(b.domain);
+        return a.domain < b.domain ? -1 : (a.domain > b.domain ? 1 : 0);
       });
     } else if (sortColumn === 'domain') {
       list.sort((a, b) => {
-        const cmp = a.domain.localeCompare(b.domain, undefined, { sensitivity: 'base' });
+        const cmp = a.domain < b.domain ? -1 : (a.domain > b.domain ? 1 : 0);
         if (cmp !== 0) return cmp * dir;
         return b.count - a.count;
       });
@@ -1039,7 +1039,7 @@ const AnalyticsApp = (() => {
     const query = filterInput ? filterInput.value.toLowerCase().trim() : '';
 
     if (!query) {
-      filteredDomains = [...allDomains];
+      filteredDomains = allDomains.slice();
     } else {
       filteredDomains = allDomains.filter(item => item.domain.includes(query));
     }
