@@ -415,34 +415,41 @@ const ResultsRenderer = (() => {
       const proto = protoMatch[0];
       const afterProto = line.substring(proto.length);
 
-      const slashIdx = afterProto.indexOf('/');
+      // If whitespace separates URL from credentials (e.g. "https://site.com/path user:pass")
+      const spaceIdx = afterProto.search(/[\s\t]/);
       let url = '';
       let rest = '';
 
-      if (slashIdx !== -1) {
-        // Find the first colon AFTER the slash: URL ends at that colon
-        const colonAfterSlash = afterProto.indexOf(':', slashIdx);
-        if (colonAfterSlash !== -1) {
-          url = proto + afterProto.substring(0, colonAfterSlash);
-          rest = afterProto.substring(colonAfterSlash + 1);
-        } else {
-          url = line;
-          rest = '';
-        }
+      if (spaceIdx !== -1) {
+        url = proto + afterProto.substring(0, spaceIdx);
+        rest = afterProto.substring(spaceIdx).trim();
       } else {
-        // No slash in afterProto: check for port (host:port:user:pass)
-        const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
-        if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
-          url = proto + portColonMatch[1] + ':' + portColonMatch[2];
-          rest = afterProto.substring(portColonMatch[0].length);
-        } else {
-          const firstColon = afterProto.indexOf(':');
-          if (firstColon !== -1) {
-            url = proto + afterProto.substring(0, firstColon);
-            rest = afterProto.substring(firstColon + 1);
+        const slashIdx = afterProto.indexOf('/');
+        if (slashIdx !== -1) {
+          // Find the first colon AFTER the slash: URL ends at that colon
+          const colonAfterSlash = afterProto.indexOf(':', slashIdx);
+          if (colonAfterSlash !== -1) {
+            url = proto + afterProto.substring(0, colonAfterSlash);
+            rest = afterProto.substring(colonAfterSlash + 1);
           } else {
             url = line;
             rest = '';
+          }
+        } else {
+          // No slash in afterProto: check for port (host:port:user:pass)
+          const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
+          if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
+            url = proto + portColonMatch[1] + ':' + portColonMatch[2];
+            rest = afterProto.substring(portColonMatch[0].length);
+          } else {
+            const firstColon = afterProto.indexOf(':');
+            if (firstColon !== -1) {
+              url = proto + afterProto.substring(0, firstColon);
+              rest = afterProto.substring(firstColon + 1);
+            } else {
+              url = line;
+              rest = '';
+            }
           }
         }
       }
@@ -477,11 +484,11 @@ const ResultsRenderer = (() => {
       }
     }
 
-    // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com:user:pass)
-    const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^:]*)?:/);
-    if (domainMatch) {
+    // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com user:pass)
+    const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^\s:]*)?[\s:]/);
+    if (domainMatch && !domainMatch[1].includes('@')) {
       const url = domainMatch[1] + (domainMatch[2] || '');
-      const rest = line.substring(domainMatch[0].length);
+      const rest = line.substring(domainMatch[0].length).trim();
       const nextColon = rest.indexOf(':');
       if (nextColon !== -1) {
         const u = rest.substring(0, nextColon);
@@ -522,7 +529,7 @@ const ResultsRenderer = (() => {
       }
     }
 
-    // 4. Standard colon split (e.g. user:pass or user:pass:with:colons or email:pass)
+    // 4. Standard colon split (e.g. user:pass or user:pass:with:colons or email:pass or user:pass:url)
     const firstColon = line.indexOf(':');
     if (firstColon === -1) {
       return { url: line, user: '', pass: '', identityType: 'unknown' };
@@ -551,6 +558,19 @@ const ResultsRenderer = (() => {
           identityType: classifyIdentity(remaining)
         };
       }
+    }
+
+    // Check if remaining ends with a trailing URL: :https://... or :http://...
+    const trailingUrlMatch = remaining.match(/:(https?:\/\/[^\s]+)$/i);
+    if (trailingUrlMatch) {
+      const trailingUrl = trailingUrlMatch[1];
+      const passwordPart = remaining.substring(0, remaining.length - trailingUrlMatch[0].length);
+      return {
+        url: trailingUrl,
+        user: firstPart,
+        pass: cleanPassword(passwordPart),
+        identityType: classifyIdentity(firstPart)
+      };
     }
 
     // Otherwise: firstPart is user (e.g. user:pass, email:pass, number:pass)

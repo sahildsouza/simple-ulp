@@ -206,34 +206,41 @@ function parseLogLine(rawLine) {
     const proto = protoMatch[0];
     const afterProto = line.substring(proto.length);
 
-    const slashIdx = afterProto.indexOf('/');
+    // If whitespace separates URL from credentials (e.g. "https://site.com/path user:pass")
+    const spaceIdx = afterProto.search(/[\s\t]/);
     let url = '';
     let rest = '';
 
-    if (slashIdx !== -1) {
-      // Find the first colon AFTER the slash: URL ends at that colon
-      const colonAfterSlash = afterProto.indexOf(':', slashIdx);
-      if (colonAfterSlash !== -1) {
-        url = proto + afterProto.substring(0, colonAfterSlash);
-        rest = afterProto.substring(colonAfterSlash + 1);
-      } else {
-        url = line;
-        rest = '';
-      }
+    if (spaceIdx !== -1) {
+      url = proto + afterProto.substring(0, spaceIdx);
+      rest = afterProto.substring(spaceIdx).trim();
     } else {
-      // No slash in afterProto: check for port (host:port:user:pass)
-      const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
-      if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
-        url = proto + portColonMatch[1] + ':' + portColonMatch[2];
-        rest = afterProto.substring(portColonMatch[0].length);
-      } else {
-        const firstColon = afterProto.indexOf(':');
-        if (firstColon !== -1) {
-          url = proto + afterProto.substring(0, firstColon);
-          rest = afterProto.substring(firstColon + 1);
+      const slashIdx = afterProto.indexOf('/');
+      if (slashIdx !== -1) {
+        // Find the first colon AFTER the slash: URL ends at that colon
+        const colonAfterSlash = afterProto.indexOf(':', slashIdx);
+        if (colonAfterSlash !== -1) {
+          url = proto + afterProto.substring(0, colonAfterSlash);
+          rest = afterProto.substring(colonAfterSlash + 1);
         } else {
           url = line;
           rest = '';
+        }
+      } else {
+        // No slash in afterProto: check for port (host:port:user:pass)
+        const portColonMatch = afterProto.match(/^([^\/:\s]+):(\d{1,5}):/);
+        if (portColonMatch && afterProto.substring(portColonMatch[0].length).includes(':')) {
+          url = proto + portColonMatch[1] + ':' + portColonMatch[2];
+          rest = afterProto.substring(portColonMatch[0].length);
+        } else {
+          const firstColon = afterProto.indexOf(':');
+          if (firstColon !== -1) {
+            url = proto + afterProto.substring(0, firstColon);
+            rest = afterProto.substring(firstColon + 1);
+          } else {
+            url = line;
+            rest = '';
+          }
         }
       }
     }
@@ -268,11 +275,11 @@ function parseLogLine(rawLine) {
     }
   }
 
-  // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com:user:pass)
-  const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^:]*)?:/);
-  if (domainMatch) {
+  // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com user:pass)
+  const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^\s:]*)?[\s:]/);
+  if (domainMatch && !domainMatch[1].includes('@')) {
     const url = domainMatch[1] + (domainMatch[2] || '');
-    const rest = line.substring(domainMatch[0].length);
+    const rest = line.substring(domainMatch[0].length).trim();
     const nextColon = rest.indexOf(':');
     if (nextColon !== -1) {
       const u = rest.substring(0, nextColon);
@@ -313,7 +320,7 @@ function parseLogLine(rawLine) {
     }
   }
 
-  // 4. Standard colon split (e.g. user:pass or user:pass:with:colons or email:pass)
+  // 4. Standard colon split (e.g. user:pass or user:pass:with:colons or email:pass or user:pass:url)
   const firstColon = line.indexOf(':');
   if (firstColon === -1) {
     return { url: line, user: '', pass: '', identityType: 'unknown' };
@@ -344,6 +351,19 @@ function parseLogLine(rawLine) {
     }
   }
 
+  // Check if remaining ends with a trailing URL: :https://... or :http://...
+  const trailingUrlMatch = remaining.match(/:(https?:\/\/[^\s]+)$/i);
+  if (trailingUrlMatch) {
+    const trailingUrl = trailingUrlMatch[1];
+    const passwordPart = remaining.substring(0, remaining.length - trailingUrlMatch[0].length);
+    return {
+      url: trailingUrl,
+      user: firstPart,
+      pass: cleanPassword(passwordPart),
+      identityType: classifyIdentity(firstPart)
+    };
+  }
+
   // Otherwise: firstPart is user (e.g. user:pass, email:pass, number:pass)
   return {
     url: '',
@@ -351,6 +371,68 @@ function parseLogLine(rawLine) {
     pass: cleanPassword(remaining),
     identityType: classifyIdentity(firstPart)
   };
+}
+
+/**
+ * Check if a field value matches the search query according to mode and case sensitivity
+ */
+function fieldMatchesQuery(fieldVal, q, m, cs) {
+  if (!fieldVal || typeof fieldVal !== 'string') return false;
+  if (m === 'regex') {
+    try {
+      return new RegExp(q, cs ? '' : 'i').test(fieldVal);
+    } catch (_) {
+      return false;
+    }
+  } else if (m === 'word') {
+    try {
+      return new RegExp(`\\b${escapeRegex(q)}\\b`, cs ? '' : 'i').test(fieldVal);
+    } catch (_) {
+      return false;
+    }
+  } else {
+    const hay = cs ? fieldVal : fieldVal.toLowerCase();
+    const needle = cs ? q : q.toLowerCase();
+    return hay.includes(needle);
+  }
+}
+
+/**
+ * Extract submatches from a line text for highlighting
+ */
+function extractSubmatches(text, q, m, cs) {
+  const submatches = [];
+  if (!text || !q) return submatches;
+  if (m === 'literal') {
+    const hay = cs ? text : text.toLowerCase();
+    const needle = cs ? q : q.toLowerCase();
+    if (!needle) return submatches;
+    let idx = hay.indexOf(needle);
+    while (idx !== -1) {
+      submatches.push({
+        start: idx,
+        end: idx + needle.length,
+        text: text.substring(idx, idx + needle.length)
+      });
+      idx = hay.indexOf(needle, idx + needle.length);
+    }
+  } else {
+    try {
+      const re = (m === 'word')
+        ? new RegExp(`\\b${escapeRegex(q)}\\b`, cs ? 'g' : 'gi')
+        : new RegExp(q, cs ? 'g' : 'gi');
+      let match;
+      while ((match = re.exec(text)) !== null) {
+        submatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          text: match[0]
+        });
+        if (match.index === re.lastIndex) re.lastIndex++;
+      }
+    } catch (_) {}
+  }
+  return submatches;
 }
 
 // ─── API: List files ──────────────────────────────────────
@@ -578,9 +660,30 @@ app.post('/api/search', (req, res) => {
       try {
         const parsed = JSON.parse(line);
         if (parsed.type === 'match') {
-          matchCount++;
           const lineText = parsed.data.lines.text.replace(/\r?\n$/, '');
           const parsedParts = parseLogLine(lineText);
+
+          // Post-validate field match when effectiveFieldFilter is active
+          if (effectiveFieldFilter) {
+            let targetVal = '';
+            if (effectiveFieldFilter === 'url') targetVal = parsedParts.url;
+            else if (effectiveFieldFilter === 'username') targetVal = parsedParts.user;
+            else if (effectiveFieldFilter === 'password') targetVal = parsedParts.pass;
+
+            if (!fieldMatchesQuery(targetVal, query, mode, caseSensitive)) {
+              continue; // Reject false positive
+            }
+          }
+
+          matchCount++;
+          const submatches = effectiveFieldFilter
+            ? extractSubmatches(lineText, query, mode, caseSensitive)
+            : (parsed.data.submatches || []).map(s => ({
+                start: s.start,
+                end: s.end,
+                text: s.match.text
+              }));
+
           const matchData = {
             type: 'match',
             file: path.basename(parsed.data.path.text),
@@ -590,14 +693,15 @@ app.post('/api/search', (req, res) => {
             user: parsedParts.user,
             pass: parsedParts.pass,
             identityType: parsedParts.identityType,
-            submatches: (parsed.data.submatches || []).map(s => ({
-              start: s.start,
-              end: s.end,
-              text: s.match.text
-            }))
+            submatches
           };
           if (!res.writableEnded) {
             res.write(JSON.stringify(matchData) + '\n');
+          }
+
+          if (maxResults && matchCount >= maxResults) {
+            try { rg.kill(); } catch (_) {}
+            break;
           }
         } else if (parsed.type === 'end') {
           completedFiles++;
@@ -634,26 +738,42 @@ app.post('/api/search', (req, res) => {
       try {
         const parsed = JSON.parse(buffer);
         if (parsed.type === 'match') {
-          matchCount++;
           const lineText = parsed.data.lines.text.replace(/\r?\n$/, '');
           const parsedParts = parseLogLine(lineText);
-          const matchData = {
-            type: 'match',
-            file: path.basename(parsed.data.path.text),
-            line: parsed.data.line_number,
-            content: lineText,
-            url: parsedParts.url,
-            user: parsedParts.user,
-            pass: parsedParts.pass,
-            identityType: parsedParts.identityType,
-            submatches: (parsed.data.submatches || []).map(s => ({
-              start: s.start,
-              end: s.end,
-              text: s.match.text
-            }))
-          };
-          if (!res.writableEnded) {
-            res.write(JSON.stringify(matchData) + '\n');
+
+          let passFilter = true;
+          if (effectiveFieldFilter) {
+            let targetVal = '';
+            if (effectiveFieldFilter === 'url') targetVal = parsedParts.url;
+            else if (effectiveFieldFilter === 'username') targetVal = parsedParts.user;
+            else if (effectiveFieldFilter === 'password') targetVal = parsedParts.pass;
+            passFilter = fieldMatchesQuery(targetVal, query, mode, caseSensitive);
+          }
+
+          if (passFilter && (!maxResults || matchCount < maxResults)) {
+            matchCount++;
+            const submatches = effectiveFieldFilter
+              ? extractSubmatches(lineText, query, mode, caseSensitive)
+              : (parsed.data.submatches || []).map(s => ({
+                  start: s.start,
+                  end: s.end,
+                  text: s.match.text
+                }));
+
+            const matchData = {
+              type: 'match',
+              file: path.basename(parsed.data.path.text),
+              line: parsed.data.line_number,
+              content: lineText,
+              url: parsedParts.url,
+              user: parsedParts.user,
+              pass: parsedParts.pass,
+              identityType: parsedParts.identityType,
+              submatches
+            };
+            if (!res.writableEnded) {
+              res.write(JSON.stringify(matchData) + '\n');
+            }
           }
         }
       } catch (_) {}
@@ -712,8 +832,8 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
     args.push('-s');
   }
 
-  // Max results: only cap if maxResults is a positive integer; otherwise unlimited
-  if (maxResults && typeof maxResults === 'number' && maxResults > 0) {
+  // Max results: only cap in rg if no field filter (Node enforces maxResults cleanly when fieldFilter is active)
+  if (maxResults && typeof maxResults === 'number' && maxResults > 0 && !fieldFilter) {
     args.push('-m', String(maxResults));
   }
 
@@ -727,7 +847,7 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
     args.push('-v');
   }
 
-  // Field filter — convert to regex targeting specific colon-delimited field
+  // Field filter — convert to regex targeting specific field
   let searchQuery = query;
   if (fieldFilter) {
     const fIdx = args.indexOf('-F');
@@ -738,17 +858,26 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
     const pattern = mode === 'regex' ? query : (mode === 'word' ? `\\b${escapeRegex(query)}\\b` : escapeRegex(query));
 
     switch (fieldFilter) {
-      case 'url':
-        // Match query anywhere in the URL segment
-        searchQuery = `^(?:[a-zA-Z0-9+.-]+:\\/\\/)?[^:\r\n]*${pattern}[^:\r\n]*:`;
+      case 'url': {
+        // Precise URL segment matching (ripgrep-compatible without lookarounds)
+        // q1: Protocol (https?://, ftp://, android://) or www. followed by query in domain/path before delimiter/credentials
+        // q2: Domain without protocol starting line (e.g. login.example.com/...)
+        // q3: Domain with query in path (e.g. example.com/login?service=...)
+        // q4: Trailing URL preceded by colon (e.g. user:pass:https://...)
+        const q1 = `(?:https?:\\/\\/|ftp:\\/\\/|android:\\/\\/|www\\.)[^\\s:|@]*${pattern}[^\\s:|]*`;
+        const q2 = `^[^\\s:|@]*${pattern}[^\\s:|@]*\\.[a-zA-Z]{2,}(?::\\d{1,5})?[\\s:\\/]`;
+        const q3 = `^[^\\s:|@]+\\.[a-zA-Z]{2,}(?::\\d{1,5})?\\/[^\\s:|]*${pattern}[^\\s:|]*`;
+        const q4 = `:(?:https?:\\/\\/|www\\.)[^\\s:|]*${pattern}[^\\s:|]*$`;
+        searchQuery = `(?:${q1}|${q2}|${q3}|${q4})`;
         break;
+      }
       case 'username':
-        // Match query in username/email/number field (handles url:user:pass, user:pass, http://)
-        searchQuery = `(?:^|:)[^:\r\n]*${pattern}[^:\r\n]*:`;
+        // Match query in username/email/number field (handles url:user:pass, url user:pass, user:pass, pipe/space delimited)
+        searchQuery = `(?:^|[:\\s|])[^:\\s|\\r\\n]*${pattern}[^:\\s|\\r\\n]*:`;
         break;
       case 'password':
         // Match query in password field
-        searchQuery = `:[^:\r\n]*${pattern}`;
+        searchQuery = `[:|][^:\\r\\n|]*${pattern}`;
         break;
     }
   }
