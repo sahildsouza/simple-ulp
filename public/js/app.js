@@ -220,8 +220,6 @@
       updateFilterBadge();
       if (isInResultsMode) {
         applyInResultsFilter();
-      } else {
-        triggerSearch();
       }
     });
   });
