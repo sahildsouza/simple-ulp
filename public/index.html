@@ -52,17 +52,44 @@
     <!-- ─── Sidebar ─────────────────────────── -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <h2 class="sidebar-title">Files</h2>
-        <button class="btn-icon btn-refresh" id="refreshFiles" aria-label="Refresh file list" title="Refresh">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <div class="sidebar-title-group">
+          <h2 class="sidebar-title">Files</h2>
+          <span class="file-count-badge" id="fileCountBadge" title="Total log files">0</span>
+        </div>
+        <div class="sidebar-header-actions">
+          <button class="btn-icon btn-sort" id="sortFilesBtn" aria-label="Sort files" title="Sort files: Natural / Size / Name">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M6 12h12M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="btn-icon btn-refresh" id="refreshFiles" aria-label="Refresh file list" title="Refresh file list">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="file-search-wrap">
+        <svg class="file-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+          <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <input type="text" class="file-search-input" id="fileSearchInput" placeholder="Filter files… (Alt+F)" autocomplete="off" spellcheck="false">
+        <button class="file-search-clear" id="fileSearchClear" aria-label="Clear filter" title="Clear filter" style="display: none;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </button>
       </div>
+      <div class="file-summary-bar" id="fileSummaryBar">
+        <span class="file-summary-text" id="fileSummaryText">0 selected</span>
+        <span class="file-summary-size" id="fileSummarySize">0 MB</span>
+      </div>
       <div class="sidebar-actions">
-        <button class="btn btn-sm btn-secondary" id="selectAll">Select all</button>
-        <button class="btn btn-sm btn-secondary" id="selectNone">Clear</button>
+        <button class="btn btn-sm btn-secondary" id="selectAll" title="Select all files">Select all</button>
+        <button class="btn btn-sm btn-secondary" id="selectNone" title="Clear selection">Clear</button>
+        <button class="btn btn-sm btn-secondary" id="invertSelection" title="Invert selection">Invert</button>
       </div>
       <div class="file-list" id="fileList">
         <div class="file-list-empty">Loading files…</div>

@@ -245,71 +245,238 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.sidebar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .sidebar-title {
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--text-secondary);
 }
 
-.sidebar-actions {
+.file-count-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.sidebar-header-actions {
   display: flex;
-  gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-4);
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-sort {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btn-sort:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.btn-sort.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* ─── File Search Box ─────────────────────────── */
+
+.file-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--surface-1);
   border-bottom: 1px solid var(--border-subtle);
 }
+
+.file-search-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.file-search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 24px 0 26px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-family: inherit;
+  transition: all var(--duration-fast);
+}
+
+.file-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-3);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.file-search-clear {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: color var(--duration-fast);
+}
+
+.file-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* ─── File Selection Summary Bar ──────────────── */
+
+.file-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  font-size: 11px;
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.file-summary-text {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.file-summary-size {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+/* ─── Sidebar Actions (Select all / Clear / Invert) */
+
+.sidebar-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.sidebar-actions .btn {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  justify-content: center;
+  height: 26px;
+}
+
+/* ─── File List Container ─────────────────────── */
 
 .file-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-2);
+  padding: 6px 8px;
+  scrollbar-width: thin;
 }
 
 .file-list-empty {
   padding: var(--sp-6) var(--sp-4);
   text-align: center;
   color: var(--text-tertiary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
-/* ─── File Item ───────────────────────────────── */
+/* ─── File Item (Refined, Modern Card) ───────── */
 
 .file-item {
   display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 3px;
   border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  background: transparent;
   cursor: pointer;
-  transition: background var(--duration-fast);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
   user-select: none;
+  position: relative;
 }
 
 .file-item:hover {
-  background: var(--surface-hover);
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+  border-left-color: var(--border-default);
 }
 
 .file-item.selected {
-  background: var(--accent-subtle);
+  background: rgba(91, 141, 239, 0.08);
+  border-color: rgba(91, 141, 239, 0.22);
+  border-left-color: var(--accent);
+}
+
+.file-item.selected:hover {
+  background: rgba(91, 141, 239, 0.12);
+  border-color: rgba(91, 141, 239, 0.35);
+  border-left-color: var(--accent-hover);
 }
 
 .file-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   appearance: none;
   -webkit-appearance: none;
   border: 1.5px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: 3.5px;
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
-  margin-top: 2px;
   transition: all var(--duration-fast);
+  background: var(--surface-1);
+}
+
+.file-checkbox:hover {
+  border-color: var(--accent);
 }
 
 .file-checkbox:checked {
@@ -322,11 +489,21 @@ a {
   position: absolute;
   top: 1px;
   left: 4px;
-  width: 5px;
-  height: 9px;
+  width: 4px;
+  height: 8px;
   border: solid var(--text-inverse);
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
+}
+
+.file-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--duration-fast);
+}
+
+.file-item.selected .file-icon {
+  color: var(--accent);
 }
 
 .file-info {
@@ -335,24 +512,94 @@ a {
 }
 
 .file-name {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-primary);
-  word-break: break-all;
-  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.file-item.selected .file-name {
+  color: #f8fafc;
+  font-weight: 600;
 }
 
 .file-meta {
-  font-size: var(--text-xs);
+  font-size: 11px;
   color: var(--text-tertiary);
   margin-top: 2px;
   display: flex;
-  gap: var(--sp-2);
+  align-items: center;
+  gap: 5px;
 }
 
-.file-meta-dot::before {
-  content: '·';
-  margin-right: var(--sp-2);
+.file-badge-size {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.file-item.selected .file-badge-size {
+  background: rgba(91, 141, 239, 0.16);
+  color: var(--accent-hover);
+}
+
+.file-badge-lines {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.file-meta-dot {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* ─── "Only" Button on Hover / Mobile ─────────── */
+
+.btn-file-only {
+  opacity: 0;
+  pointer-events: none;
+  margin-left: auto;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.file-item:hover .btn-file-only,
+.file-item:focus-within .btn-file-only {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.btn-file-only:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px rgba(91, 141, 239, 0.4);
+}
+
+@media (max-width: 768px) {
+  .btn-file-only {
+    opacity: 0.7;
+    pointer-events: auto;
+  }
 }
 
 /* ─── Main Content ────────────────────────────── */
