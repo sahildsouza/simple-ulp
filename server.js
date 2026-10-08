@@ -276,7 +276,7 @@ function parseLogLine(rawLine) {
   }
 
   // 2. Domain-based URL without protocol (e.g. login.site.com/path:user:pass or site.com user:pass)
-  const domainMatch = line.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^\s:]*)?[\s:]/);
+  const domainMatch = line.match(/^((?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::\d{1,5})?)(\/[^\s:]*)?[\s:]/);
   if (domainMatch && !domainMatch[1].includes('@')) {
     const url = domainMatch[1] + (domainMatch[2] || '');
     const rest = line.substring(domainMatch[0].length).trim();
@@ -860,15 +860,30 @@ function buildRgArgs(query, mode, caseSensitive, maxResults, context, invertMatc
     switch (fieldFilter) {
       case 'url': {
         // Precise URL segment matching (ripgrep-compatible without lookarounds)
-        // q1: Protocol (https?://, ftp://, android://) or www. followed by query in domain/path before delimiter/credentials
-        // q2: Domain without protocol starting line (e.g. login.example.com/...)
-        // q3: Domain with query in path (e.g. example.com/login?service=...)
-        // q4: Trailing URL preceded by colon (e.g. user:pass:https://...)
-        const q1 = `(?:https?:\\/\\/|ftp:\\/\\/|android:\\/\\/|www\\.)[^\\s:|@]*${pattern}[^\\s:|]*`;
-        const q2 = `^[^\\s:|@]*${pattern}[^\\s:|@]*\\.[a-zA-Z]{2,}(?::\\d{1,5})?[\\s:\\/]`;
-        const q3 = `^[^\\s:|@]+\\.[a-zA-Z]{2,}(?::\\d{1,5})?\\/[^\\s:|]*${pattern}[^\\s:|]*`;
-        const q4 = `:(?:https?:\\/\\/|www\\.)[^\\s:|]*${pattern}[^\\s:|]*$`;
-        searchQuery = `(?:${q1}|${q2}|${q3}|${q4})`;
+        // Protocol (https?://, ftp://, android://) or www. anywhere in line before delimiter
+        const qProto = `(?:https?:\\/\\/|ftp:\\/\\/|android:\\/\\/|www\\.)[^\\s:|@]*${pattern}[^\\s:|]*`;
+
+        // Check if query itself has a dot or slash (e.g. "1024terabox.com", "terabox.com/login")
+        const hasDot = query.includes('.');
+        const hasSlash = query.includes('/');
+
+        let qDomain;
+        if (hasDot || hasSlash) {
+          // Query already specifies domain/extension or path:
+          // Match line starting with domain characters (no @) containing pattern,
+          // followed by optional port/path before credentials/delimiter or end of line
+          qDomain = `^[^\\s:|@]*${pattern}[^\\s:|]*(?::\\d{1,5})?(?:[\\s:\\/|]|$)`;
+        } else {
+          // Query has no dot: match query within host (which must end with dot + TLD) or within URL path
+          const qHost = `^[^\\s:|@]*${pattern}[^\\s:|@]*\\.[a-zA-Z]{2,}(?::\\d{1,5})?(?:[\\s:\\/|]|$)`;
+          const qPath = `^[^\\s:|@]+\\.[a-zA-Z]{2,}(?::\\d{1,5})?\\/[^\\s:|]*${pattern}[^\\s:|]*`;
+          qDomain = `(?:${qHost}|${qPath})`;
+        }
+
+        // Trailing URL preceded by colon or pipe
+        const qTrailing = `[:|](?:https?:\\/\\/|www\\.)[^\\s:|]*${pattern}[^\\s:|]*$`;
+
+        searchQuery = `(?:${qProto}|${qDomain}|${qTrailing})`;
         break;
       }
       case 'username':
