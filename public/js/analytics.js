@@ -67,24 +67,34 @@ const AnalyticsApp = (() => {
     return Number(n).toLocaleString('en-US');
   }
 
+  let currentVScrollTop = 0;
+  let isDirectScrolling = false;
+
   /**
    * Get virtual scroll top (scales if total virtual height exceeds browser safe limit)
    */
   function getVirtualScrollTop() {
     if (!scrollContainer) return 0;
     const totalItems = filteredDomains.length;
-    if (totalItems === 0) return 0;
+    if (totalItems === 0) {
+      currentVScrollTop = 0;
+      return 0;
+    }
     const totalRawHeight = totalItems * ROW_HEIGHT;
     const clientHeight = scrollContainer.clientHeight || 600;
 
     if (totalRawHeight <= MAX_SAFE_SCROLL_HEIGHT) {
-      return scrollContainer.scrollTop;
+      currentVScrollTop = scrollContainer.scrollTop;
+      return currentVScrollTop;
     }
 
-    const maxDomScroll = Math.max(1, MAX_SAFE_SCROLL_HEIGHT - clientHeight);
-    const scrollRatio = Math.min(1, Math.max(0, scrollContainer.scrollTop / maxDomScroll));
-    const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
-    return scrollRatio * maxVirtualScroll;
+    if (!isDirectScrolling) {
+      const maxDomScroll = Math.max(1, MAX_SAFE_SCROLL_HEIGHT - clientHeight);
+      const scrollRatio = Math.min(1, Math.max(0, scrollContainer.scrollTop / maxDomScroll));
+      const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+      currentVScrollTop = scrollRatio * maxVirtualScroll;
+    }
+    return currentVScrollTop;
   }
 
   /**
@@ -93,19 +103,29 @@ const AnalyticsApp = (() => {
   function setVirtualScrollTop(targetVScrollTop) {
     if (!scrollContainer) return;
     const totalItems = filteredDomains.length;
-    if (totalItems === 0) return;
+    if (totalItems === 0) {
+      currentVScrollTop = 0;
+      scrollContainer.scrollTop = 0;
+      return;
+    }
     const clientHeight = scrollContainer.clientHeight || 600;
     const totalRawHeight = totalItems * ROW_HEIGHT;
+    const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
+
+    currentVScrollTop = Math.max(0, Math.min(maxVirtualScroll, targetVScrollTop));
 
     if (totalRawHeight <= MAX_SAFE_SCROLL_HEIGHT) {
-      scrollContainer.scrollTop = targetVScrollTop;
+      isDirectScrolling = true;
+      scrollContainer.scrollTop = currentVScrollTop;
+      isDirectScrolling = false;
       return;
     }
 
-    const maxVirtualScroll = Math.max(1, totalRawHeight - clientHeight);
-    const ratio = Math.min(1, Math.max(0, targetVScrollTop / maxVirtualScroll));
+    const ratio = maxVirtualScroll > 0 ? (currentVScrollTop / maxVirtualScroll) : 0;
     const maxDomScroll = Math.max(1, MAX_SAFE_SCROLL_HEIGHT - clientHeight);
+    isDirectScrolling = true;
     scrollContainer.scrollTop = ratio * maxDomScroll;
+    isDirectScrolling = false;
   }
 
   /**
@@ -274,39 +294,40 @@ const AnalyticsApp = (() => {
     fastThumbEl.addEventListener('pointerup', stopDrag);
     fastThumbEl.addEventListener('pointercancel', stopDrag);
 
-    // Track click to jump
+    // Track click to page jump (smooth, human-scale paging instead of wild leaping)
     fastTrackEl.addEventListener('pointerdown', (e) => {
       if (e.target === fastThumbEl || fastThumbEl.contains(e.target)) return;
       e.preventDefault();
       const trackRect = fastTrackEl.getBoundingClientRect();
-      const thumbHeight = fastThumbEl.offsetHeight;
-      const availableTrack = trackRect.height - thumbHeight;
-      if (availableTrack <= 0) return;
-
-      const clickY = e.clientY - trackRect.top - (thumbHeight / 2);
-      const ratio = Math.max(0, Math.min(1, clickY / availableTrack));
-
-      const totalItems = filteredDomains.length;
+      const thumbTop = fastThumbEl.offsetTop;
+      const clickY = e.clientY - trackRect.top;
       const clientHeight = scrollContainer.clientHeight || 600;
-      const totalRawHeight = totalItems * ROW_HEIGHT;
-      const maxVirtualScroll = Math.max(0, totalRawHeight - clientHeight);
-      const targetVScroll = ratio * maxVirtualScroll;
+      const pageDistance = clientHeight * 0.8;
+      const vScrollTop = getVirtualScrollTop();
 
-      setVirtualScrollTop(targetVScroll);
+      if (clickY < thumbTop) {
+        setVirtualScrollTop(vScrollTop - pageDistance);
+      } else {
+        setVirtualScrollTop(vScrollTop + pageDistance);
+      }
+
       renderVisible();
-
       const thumbInfo = updateFastScrollThumb();
       if (thumbInfo) {
         showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
       }
     });
 
-    // Forward wheel events on the track to the scroll container
+    // Forward wheel events on the track to virtual scroller with smooth damping
     fastTrackEl.addEventListener('wheel', (e) => {
       e.preventDefault();
+      let deltaY = e.deltaY;
+      if (e.deltaMode === 1) deltaY *= ROW_HEIGHT;
+      else if (e.deltaMode === 2) deltaY *= (scrollContainer.clientHeight || 600);
+      const clampedDelta = Math.max(-200, Math.min(200, deltaY));
+
       const vScrollTop = getVirtualScrollTop();
-      const delta = e.deltaY;
-      setVirtualScrollTop(vScrollTop + delta);
+      setVirtualScrollTop(vScrollTop + clampedDelta);
       renderVisible();
       const thumbInfo = updateFastScrollThumb();
       if (thumbInfo) {
@@ -473,6 +494,137 @@ const AnalyticsApp = (() => {
     if (scrollContainer) {
       scrollContainer.addEventListener('scroll', onScroll, { passive: true });
       window.addEventListener('resize', onScroll, { passive: true });
+
+      // Direct normalized wheel listener on table container
+      scrollContainer.addEventListener('wheel', (e) => {
+        if (currentView !== 'analytics' || filteredDomains.length === 0) return;
+        e.preventDefault();
+
+        let deltaY = e.deltaY;
+        if (e.deltaMode === 1) deltaY *= ROW_HEIGHT;
+        else if (e.deltaMode === 2) deltaY *= (scrollContainer.clientHeight || 600);
+
+        // Smooth damping: 1 standard mouse wheel notch = ~80-120px (2-3 rows)
+        const clampedDelta = Math.max(-200, Math.min(200, deltaY));
+
+        const vScrollTop = getVirtualScrollTop();
+        setVirtualScrollTop(vScrollTop + clampedDelta);
+        renderVisible();
+
+        const thumbInfo = updateFastScrollThumb();
+        if (thumbInfo) {
+          showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+        }
+      }, { passive: false });
+
+      // Touch handlers for mobile / touchscreens (e.g. Android Termux)
+      let touchStartY = 0;
+      let touchLastY = 0;
+      let touchLastTime = 0;
+      let touchVelocity = 0;
+      let touchAnimId = null;
+
+      scrollContainer.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1 && currentView === 'analytics') {
+          touchStartY = e.touches[0].clientY;
+          touchLastY = touchStartY;
+          touchLastTime = performance.now();
+          touchVelocity = 0;
+          if (touchAnimId) {
+            cancelAnimationFrame(touchAnimId);
+            touchAnimId = null;
+          }
+        }
+      }, { passive: true });
+
+      scrollContainer.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && currentView === 'analytics' && filteredDomains.length > 0) {
+          const clientY = e.touches[0].clientY;
+          const deltaY = touchLastY - clientY;
+          const now = performance.now();
+          const dt = Math.max(1, now - touchLastTime);
+
+          touchVelocity = deltaY / dt;
+          touchLastY = clientY;
+          touchLastTime = now;
+
+          if (e.cancelable) e.preventDefault();
+
+          const vScrollTop = getVirtualScrollTop();
+          setVirtualScrollTop(vScrollTop + deltaY);
+          renderVisible();
+
+          const thumbInfo = updateFastScrollThumb();
+          if (thumbInfo) {
+            showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+          }
+        }
+      }, { passive: false });
+
+      scrollContainer.addEventListener('touchend', () => {
+        if (currentView !== 'analytics' || filteredDomains.length === 0) return;
+        if (Math.abs(touchVelocity) > 0.15) {
+          let currentVelocity = Math.max(-1.5, Math.min(1.5, touchVelocity));
+          function momentumStep() {
+            if (Math.abs(currentVelocity) < 0.05) return;
+            const vScrollTop = getVirtualScrollTop();
+            const stepDelta = currentVelocity * 16;
+            setVirtualScrollTop(vScrollTop + stepDelta);
+            renderVisible();
+
+            const thumbInfo = updateFastScrollThumb();
+            if (thumbInfo) {
+              showScrollPopup(thumbInfo.thumbTop, thumbInfo.thumbHeight, thumbInfo.trackHeight);
+            }
+
+            currentVelocity *= 0.90;
+            touchAnimId = requestAnimationFrame(momentumStep);
+          }
+          touchAnimId = requestAnimationFrame(momentumStep);
+        }
+      }, { passive: true });
+
+      // Keyboard navigation
+      window.addEventListener('keydown', (e) => {
+        if (currentView !== 'analytics' || filteredDomains.length === 0) return;
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+        const vScrollTop = getVirtualScrollTop();
+        const clientHeight = scrollContainer.clientHeight || 600;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setVirtualScrollTop(vScrollTop + ROW_HEIGHT);
+          renderVisible();
+          updateFastScrollThumb();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setVirtualScrollTop(vScrollTop - ROW_HEIGHT);
+          renderVisible();
+          updateFastScrollThumb();
+        } else if (e.key === 'PageDown') {
+          e.preventDefault();
+          setVirtualScrollTop(vScrollTop + clientHeight * 0.8);
+          renderVisible();
+          updateFastScrollThumb();
+        } else if (e.key === 'PageUp') {
+          e.preventDefault();
+          setVirtualScrollTop(vScrollTop - clientHeight * 0.8);
+          renderVisible();
+          updateFastScrollThumb();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          setVirtualScrollTop(0);
+          renderVisible();
+          updateFastScrollThumb();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          setVirtualScrollTop(filteredDomains.length * ROW_HEIGHT);
+          renderVisible();
+          updateFastScrollThumb();
+        }
+      });
     }
 
     initFastScroller();
@@ -1066,6 +1218,7 @@ const AnalyticsApp = (() => {
     if (viewport) {
       viewport.style.height = safeHeight + 'px';
     }
+    currentVScrollTop = 0;
     if (scrollContainer) {
       scrollContainer.scrollTop = 0;
     }
