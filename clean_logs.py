@@ -108,18 +108,21 @@ def strip_ad_suffix(line: str) -> str:
     if "\t" in cleaned:
         cleaned = cleaned.split("\t")[0].strip()
 
-    # Strips pipes only when followed by advertising tags / keywords
-    cleaned = re.sub(
-        r"\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d|free|join|date|http).*$",
-        "", cleaned, flags=re.IGNORECASE
-    )
-    # Arrow separators (e.g. ' -> ', ' ➔ ', ' => ')
-    cleaned = re.sub(r"\s*[➔➜➞➝➢➣➤⇻]\s*.*$", "", cleaned)
-    cleaned = re.sub(r"[\t\s]+(?:->|=>)\s+.*$", "", cleaned)
-    # Telegram tags & brackets
-    cleaned = re.sub(r"[\t\s]+t\.me/[a-zA-Z0-9_\-\.\/]+.*$", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"[\t\s]+\((?:@|t\.me)[^\)]*\).*$", "", cleaned, flags=re.IGNORECASE)
+    # Fast string guards: skip heavy regex engine when trigger characters are absent
+    if "|" in cleaned:
+        cleaned = re.sub(
+            r"\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d|free|join|date|http).*$",
+            "", cleaned, flags=re.IGNORECASE
+        )
+    if "->" in cleaned or "=>" in cleaned or any(a in cleaned for a in "➔➜➞➝➢➣➤⇻"):
+        cleaned = re.sub(r"\s*[➔➜➞➝➢➣➤⇻]\s*.*$", "", cleaned)
+        cleaned = re.sub(r"[\t\s]+(?:->|=>)\s+.*$", "", cleaned)
+    if "t.me" in cleaned.lower():
+        cleaned = re.sub(r"[\t\s]+t\.me/[a-zA-Z0-9_\-\.\/]+.*$", "", cleaned, flags=re.IGNORECASE)
+    if "[" in cleaned:
+        cleaned = re.sub(r"[\t\s]+\[(?:Telegram|Channel|VIP|Cloud|Fresh|Owner|Date|By|Credit)[^\]]*\].*$", "", cleaned, flags=re.IGNORECASE)
+    if "(" in cleaned:
+        cleaned = re.sub(r"[\t\s]+\((?:@|t\.me)[^\)]*\).*$", "", cleaned, flags=re.IGNORECASE)
 
     return cleaned.strip()
 
@@ -131,28 +134,29 @@ def clean_password(p: str) -> str:
     if "\t" in p:
         p = p.split("\t")[0]
 
-    # Pipe watermarks: strip only when preceded by space or followed by promotional keywords
-    p = re.sub(r"\s+\|\s*.*$", "", p)
-    p = re.sub(
-        r"\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d|free|join|date|http).*$",
-        "", p, flags=re.IGNORECASE
-    )
+    # Fast string guards before invoking re.sub
+    if "|" in p:
+        p = re.sub(r"\s+\|\s*.*$", "", p)
+        p = re.sub(
+            r"\s*\|\s*(?:life|@|t\.me|cloud|vip|priv|fresh|owner|channel|telegram|\$|\d|free|join|date|http).*$",
+            "", p, flags=re.IGNORECASE
+        )
 
-    # Arrow separators
-    p = re.sub(r"\s*[➔➜➞➝➢➣➤⇻]\s*.*$", "", p)
-    p = re.sub(r"\s+(?:->|=>)\s+.*$", "", p)
+    if "->" in p or "=>" in p or any(a in p for a in "➔➜➞➝➢➣➤⇻"):
+        p = re.sub(r"\s*[➔➜➞➝➢➣➤⇻]\s*.*$", "", p)
+        p = re.sub(r"\s+(?:->|=>)\s+.*$", "", p)
 
-    # Control characters (\x00-\x08, \x0b-\x0c, \x0e-\x1f, \x7f-\x9f)
-    p = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f].*$", "", p)
+    if any(ord(c) < 32 or (127 <= ord(c) <= 159) for c in p):
+        p = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f].*$", "", p)
 
-    # Multiple spaces followed by promo text
-    p = re.sub(
-        r"\s{2,}(?:[@#|~]|t\.me/|https?://|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$",
-        "", p, flags=re.IGNORECASE
-    )
+    if "  " in p:
+        p = re.sub(
+            r"\s{2,}(?:[@#|~]|t\.me/|https?://|\[|\(|lifetime|cloud|priv8|private|vip|fresh|free|owner).*$",
+            "", p, flags=re.IGNORECASE
+        )
 
-    # Trailing unicode watermark symbols
-    p = re.sub(r"[\s\u200B-\u200D\uFEFF]*[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ].*$", "", p)
+    if any(c in p for c in "∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ\u200B\u200C\u200D\uFEFF"):
+        p = re.sub(r"[\s\u200B-\u200D\uFEFF]*[∉∘∏ᚧᚯᚥᚡ□▒┋🧨╬∁▨∈⟴🧬💀🔥👁‍🗨🖥️🔐💿ᚤ].*$", "", p)
 
     return p.strip()
 
@@ -328,18 +332,21 @@ def parse_single_line(raw_line: str) -> Optional[Tuple[str, str, str]]:
     return None
 
 
-def stream_file_records(file_path: str) -> Iterator[Tuple[Tuple[str, str, str], int]]:
+def process_file(file_path: str, engine: "ExternalMergeDeduplicator") -> Tuple[int, int]:
     """
-    Streams clean credentials from a log file.
-    Supports both single-line combos and multi-line stealer blocks.
-    Yields ((domain, user, password), lines_consumed_delta).
+    Processes a log file in a single streaming pass without re-reading from disk.
+    Parses both single-line combos and multi-line stealer blocks.
+    Returns (records_parsed, raw_lines_scanned).
     """
     current_url = None
     current_user = None
     current_pass = None
+    file_records = 0
+    file_lines = 0
 
     with open(file_path, "r", encoding="utf-8", errors="ignore", buffering=IO_BUFFER_SIZE) as f:
         for line in f:
+            file_lines += 1
             stripped = line.strip()
             if not stripped:
                 continue
@@ -352,7 +359,8 @@ def stream_file_records(file_path: str) -> Iterator[Tuple[Tuple[str, str, str], 
                     d = extract_domain(current_url)
                     p = clean_password(current_pass)
                     if is_valid_credential(d, current_user, p):
-                        yield (d, current_user, p), 1
+                        engine.add(d, current_user, p)
+                        file_records += 1
                     current_url = current_user = current_pass = None
 
                 val = stripped.split(":", 1)[1].strip()
@@ -372,7 +380,8 @@ def stream_file_records(file_path: str) -> Iterator[Tuple[Tuple[str, str, str], 
                     d = extract_domain(current_url)
                     p = clean_password(current_pass)
                     if is_valid_credential(d, current_user, p):
-                        yield (d, current_user, p), 1
+                        engine.add(d, current_user, p)
+                        file_records += 1
                     current_url = current_user = current_pass = None
                 continue
 
@@ -382,21 +391,26 @@ def stream_file_records(file_path: str) -> Iterator[Tuple[Tuple[str, str, str], 
                     d = extract_domain(current_url)
                     p = clean_password(current_pass)
                     if is_valid_credential(d, current_user, p):
-                        yield (d, current_user, p), 1
+                        engine.add(d, current_user, p)
+                        file_records += 1
                 current_url = current_user = current_pass = None
                 continue
 
             # Standard single-line combo
             parsed = parse_single_line(stripped)
             if parsed:
-                yield parsed, 1
+                engine.add(parsed[0], parsed[1], parsed[2])
+                file_records += 1
 
     # Flush any remaining multi-line block at EOF
     if current_url and current_user and current_pass:
         d = extract_domain(current_url)
         p = clean_password(current_pass)
         if is_valid_credential(d, current_user, p):
-            yield (d, current_user, p), 1
+            engine.add(d, current_user, p)
+            file_records += 1
+
+    return file_records, file_lines
 
 
 def format_bytes(num_bytes: int) -> str:
@@ -615,18 +629,10 @@ def main():
 
         for idx, file_path in enumerate(txt_files, 1):
             fname = os.path.basename(file_path)
-            file_lines = 0
-            file_records = 0
 
             try:
-                for (domain, user, password), delta in stream_file_records(file_path):
-                    engine.add(domain, user, password)
-                    file_records += 1
-                    total_parsed_records += 1
-
-                # Approximate line count for progress
-                with open(file_path, "rb") as bf:
-                    file_lines = sum(1 for _ in bf)
+                file_records, file_lines = process_file(file_path, engine)
+                total_parsed_records += file_records
                 total_raw_lines += file_lines
 
                 elapsed = time.time() - start_time
